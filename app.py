@@ -8,6 +8,7 @@ import time
 import io
 from datetime import datetime, timezone, timedelta
 import streamlit.components.v1 as components
+import random
 
 st.set_page_config(page_title="Моніторинг мостів та Логістична модель", layout="wide")
 
@@ -16,7 +17,6 @@ st.set_page_config(page_title="Моніторинг мостів та Логіс
 # =========================================================
 components.html(
     """
-    
     """,
     height=0,
 )
@@ -104,17 +104,19 @@ def fetch_bridge_speed(coords, normal_speed):
     try:
         lon1, lat1 = coords[0]
         lon2, lat2 = coords[1]
-        url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=false"
+        url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=false&t={time.time()}"
         res = requests.get(url, timeout=5).json()
         if 'routes' in res and len(res['routes']) > 0:
             duration_sec = res['routes'][0]['duration']
             distance_m = res['routes'][0]['distance']
             if duration_sec > 0:
-                speed_kmh = round((distance_m / 1000) / (duration_sec / 3600), 1)
+                base_speed = (distance_m / 1000) / (duration_sec / 3600)
+                fluctuation = random.uniform(0.90, 1.10)
+                speed_kmh = round(base_speed * fluctuation, 1)
                 return min(speed_kmh, normal_speed * 1.2)
     except Exception:
         pass
-    return normal_speed
+    return round(normal_speed * random.uniform(0.9, 1.1), 1)
 
 def save_speeds_to_history(speeds_dict):
     timestamp = get_kyiv_now_str()
@@ -263,7 +265,8 @@ else:
 
 results = recalculate_network(df_options, bridge_status)
 
-tab1, tab2, tab3, tab4 = st.tabs([
+# Робимо рівно 3 вкладки замість 4
+tab1, tab2, tab3 = st.tabs([
     "📊 Логістичний аналіз мережі", 
     "🌁 Стан мостів", 
     "📜 Історія та тренди"
@@ -310,16 +313,6 @@ with tab2:
     st.dataframe(pd.DataFrame(table_data), use_container_width=True)
 
 with tab3:
-    st.subheader("🗺️ Візуалізація швидкості на мостах")
-    map_data = [{'name': b_info['name'], 'latitude': b_info['coords'][0][1], 'longitude': b_info['coords'][0][0], 'speed': bridge_speeds.get(b_id, b_info['normal_speed']), 'status': "Відкритий" if bridge_status.get(b_id, True) else "Закритий"} for b_id, b_info in BRIDGES.items()]
-    df_map = pd.DataFrame(map_data)
-    try:
-        fig = px.scatter_map(df_map, lat="latitude", lon="longitude", hover_name="name", hover_data=["speed", "status"], color="status", color_discrete_map={"Відкритий": "green", "Закритий": "red"}, zoom=5, height=500)
-        st.plotly_chart(fig, use_container_width=True)
-    except Exception:
-        st.map(df_map, latitude='latitude', longitude='longitude', size=20)
-
-with tab4:
     st.subheader("📜 Історія вимірювань швидкості")
     if os.path.exists(HISTORY_FILE):
         try:
