@@ -20,48 +20,37 @@ def get_kyiv_now_str():
     return datetime.now(KYIV_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 # =========================================================
-# БЛОК АВТОРИЗАЦІЇ (ЛОГІН / ПАРОЛЬ)
+# БЛОК АВТОРИЗАЦІЇ (ПРАЦЮЄ ВХІД З ENTER)
 # =========================================================
 def check_password():
-    def password_entered():
-        try:
-            correct_user = st.secrets.get("credentials", {}).get("username", "admin")
-            correct_pass = st.secrets.get("credentials", {}).get("password", "avrora2026")
-        except Exception:
-            correct_user = "admin"
-            correct_pass = "avrora2026"
-
-        if (st.session_state.get("username") == correct_user and 
-            st.session_state.get("password") == correct_pass):
-            st.session_state["password_correct"] = True
-            if "password" in st.session_state:
-                del st.session_state["password"]
-            if "username" in st.session_state:
-                del st.session_state["username"]
-        else:
-            st.session_state["password_correct"] = False
+    try:
+        correct_user = st.secrets.get("credentials", {}).get("username", "admin")
+        correct_pass = st.secrets.get("credentials", {}).get("password", "avrora2026")
+    except Exception:
+        correct_user = "admin"
+        correct_pass = "avrora2026"
 
     if "password_correct" not in st.session_state:
+        st.session_state["password_correct"] = False
+
+    if not st.session_state["password_correct"]:
         c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
             st.markdown("### 🔒 Вхід у систему")
-            st.text_input("Логін", key="username")
-            st.text_input("Пароль", type="password", key="password")
-            st.button("Увійти", on_click=password_entered)
+            with st.form("login_form"):
+                username = st.text_input("Логін")
+                password = st.text_input("Пароль", type="password")
+                submit_button = st.form_submit_button("Увійти", use_container_width=True)
+
+                if submit_button:
+                    if username == correct_user and password == correct_pass:
+                        st.session_state["password_correct"] = True
+                        st.rerun()
+                    else:
+                        st.error("❌ Невірний логін або пароль")
         return False
 
-    elif not st.session_state["password_correct"]:
-        c1, c2, c3 = st.columns([1, 2, 1])
-        with c2:
-            st.markdown("### 🔒 Вхід у систему")
-            st.text_input("Логін", key="username")
-            st.text_input("Пароль", type="password", key="password")
-            st.button("Увійти", on_click=password_entered)
-            st.error("❌ Невірний логін або пароль")
-        return False
-
-    else:
-        return True
+    return True
 
 if not check_password():
     st.stop()
@@ -131,6 +120,7 @@ def save_speeds_to_history(speeds_dict):
         df_combined = df_new
     df_combined.to_csv(HISTORY_FILE, index=False)
 
+@st.cache_data
 def load_latest_speeds():
     if not os.path.exists(HISTORY_FILE):
         speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
@@ -233,10 +223,10 @@ if mode == "🤖 Автоматичний (OSRM)":
     st.sidebar.info(f"🕒 Останні дані від: **{last_time}**\n*(Фоновий запит що-20 хв)*")
     
     if st.sidebar.button("🔄 Оновити дані з OSRM зараз", use_container_width=True):
-        with st.spinner("Опитування OSRM API..."):
+        with st.spinner("Опитування OSRM API та збереження..."):
             new_speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
             save_speeds_to_history(new_speeds)
-            st.cache_data.clear()
+            load_latest_speeds.clear()  # Примусово очищаємо кеш зчитування CSV
             st.rerun()
 
     for b_id, spd in bridge_speeds.items():
@@ -311,7 +301,7 @@ with tab3:
 with tab4:
     st.subheader("📜 Історія вимірювань швидкості")
     if os.path.exists(HISTORY_FILE):
-        df_hist = pd.read_csv(HISTORY_FILE)
+        df_hist = pd.read_csv(HISTORY_FILE).sort_values(by='timestamp', ascending=False)
         if not df_hist.empty:
             selected_bridge = st.selectbox("Оберіть міст для перегляду динаміки:", df_hist['bridge_name'].unique())
             df_filtered = df_hist[df_hist['bridge_name'] == selected_bridge]
@@ -327,7 +317,7 @@ with tab4:
             st.plotly_chart(fig_line, use_container_width=True)
             
             st.subheader("📊 Повна таблиця зафіксованих замірів")
-            st.dataframe(df_hist.sort_values(by='timestamp', ascending=False), use_container_width=True, hide_index=True)
+            st.dataframe(df_hist, use_container_width=True, hide_index=True)
             
             csv_hist = df_hist.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
