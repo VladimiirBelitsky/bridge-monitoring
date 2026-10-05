@@ -7,8 +7,19 @@ import threading
 import time
 import io
 from datetime import datetime, timezone, timedelta
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Моніторинг мостів та Логістична модель", layout="wide")
+
+# =========================================================
+# АВТОМАТИЧНЕ ОНОВЛЕННЯ СТОРІНКИ В БРАУЗЕРІ (КОЖНІ 5 ХВ)
+# =========================================================
+components.html(
+    """
+    
+    """,
+    height=0,
+)
 
 # =========================================================
 # ЧАСОВИЙ ПОЯС КИЄВА (UTC+3)
@@ -16,11 +27,10 @@ st.set_page_config(page_title="Моніторинг мостів та Логіс
 KYIV_TZ = timezone(timedelta(hours=3))
 
 def get_kyiv_now_str():
-    """Повертає поточний київський час у стандартному форматі"""
     return datetime.now(KYIV_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 # =========================================================
-# БЛОК АВТОРИЗАЦІЇ (ВИПРАВЛЕНО РОБОТУ ENTER)
+# БЛОК АВТОРИЗАЦІЇ (ГАРАНТОВАНО ПРАЦЮЄ ENTER)
 # =========================================================
 def check_password():
     try:
@@ -37,15 +47,17 @@ def check_password():
         c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
             st.markdown("### 🔒 Вхід у систему")
-            
-            # Використовуємо st.form, але забезпечуємо обробку Enter
             with st.form("login_form", clear_on_submit=False):
-                username = st.text_input("Логін", key="input_username")
-                password = st.text_input("Пароль", type="password", key="input_password")
+                st.text_input("Логін", key="input_username")
+                st.text_input("Пароль", type="password", key="input_password")
+                
                 submit_button = st.form_submit_button("Увійти", use_container_width=True)
 
                 if submit_button:
-                    if username == correct_user and password == correct_pass:
+                    user_val = st.session_state.get("input_username", "")
+                    pass_val = st.session_state.get("input_password", "")
+                    
+                    if user_val == correct_user and pass_val == correct_pass:
                         st.session_state["password_correct"] = True
                         st.rerun()
                     else:
@@ -125,7 +137,6 @@ def save_speeds_to_history(speeds_dict):
         df_combined = df_new
     df_combined.to_csv(HISTORY_FILE, index=False)
 
-# ПРИБРАНО @st.cache_data ДЛЯ ЗАБЕЗПЕЧЕННЯ АКТУАЛЬНОСТІ ДАНИХ
 def load_latest_speeds():
     if not os.path.exists(HISTORY_FILE):
         speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
@@ -152,7 +163,6 @@ def load_latest_speeds():
         speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
         return speeds, get_kyiv_now_str()
 
-# СТАБІЛЬНИЙ ФОНОВИЙ ЗБИРАЧ ДАНИХ (ЗАХИЩЕНИЙ ВІД ПАДІННЯ ТА ДУБЛЮВАННЯ)
 @st.cache_resource
 def start_background_collector():
     def background_collector():
@@ -162,7 +172,7 @@ def start_background_collector():
                 save_speeds_to_history(speeds)
             except Exception:
                 pass
-            time.sleep(20 * 60) # 20 хвилин
+            time.sleep(20 * 60)
 
     thread = threading.Thread(target=background_collector, daemon=True)
     thread.start()
@@ -170,7 +180,6 @@ def start_background_collector():
 
 start_background_collector()
 
-# БЕЗПЕЧНЕ ЗАВАНТАЖЕННЯ EXCEL (ОМИНАЄ БЛОКУВАННЯ)
 @st.cache_data
 def load_excel_model(file_path):
     with open(file_path, "rb") as f:
