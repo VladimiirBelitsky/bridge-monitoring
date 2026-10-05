@@ -6,9 +6,18 @@ import os
 import threading
 import time
 import io
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 st.set_page_config(page_title="Моніторинг мостів та Логістична модель", layout="wide")
+
+# =========================================================
+# ЧАСОВИЙ ПОЯС КИЄВА (UTC+3)
+# =========================================================
+KYIV_TZ = timezone(timedelta(hours=3))
+
+def get_kyiv_now_str():
+    """Повертає поточний київський час у стандартному форматі"""
+    return datetime.now(KYIV_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 # =========================================================
 # БЛОК АВТОРИЗАЦІЇ (ЛОГІН / ПАРОЛЬ)
@@ -105,7 +114,7 @@ def fetch_bridge_speed(coords, normal_speed):
     return normal_speed
 
 def save_speeds_to_history(speeds_dict):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = get_kyiv_now_str()
     records = []
     for b_id, spd in speeds_dict.items():
         records.append({
@@ -126,13 +135,13 @@ def load_latest_speeds():
     if not os.path.exists(HISTORY_FILE):
         speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
         save_speeds_to_history(speeds)
-        return speeds, datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return speeds, get_kyiv_now_str()
     
     df_hist = pd.read_csv(HISTORY_FILE)
     if df_hist.empty:
         speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
         save_speeds_to_history(speeds)
-        return speeds, datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return speeds, get_kyiv_now_str()
 
     latest_timestamp = df_hist['timestamp'].max()
     df_latest = df_hist[df_hist['timestamp'] == latest_timestamp]
@@ -213,7 +222,7 @@ except Exception as e:
     st.stop()
 
 st.sidebar.header("⚙ Налаштування системи")
-mode = st.sidebar.radio("Режим роботи:", ["🤖 Автоматичний (OSRM)", "🎛️️ Ручний конструктор"])
+mode = st.sidebar.radio("Режим роботи:", ["🤖 Автоматичний (OSRM)", "🎛 Ручний конструктор"])
 speed_threshold = st.sidebar.slider("Поріг закритого мосту (км/год):", min_value=3, max_value=12, value=7)
 
 bridge_status = {}
@@ -223,10 +232,11 @@ if mode == "🤖 Автоматичний (OSRM)":
     bridge_speeds, last_time = load_latest_speeds()
     st.sidebar.info(f"🕒 Останні дані від: **{last_time}**\n*(Фоновий запит що-20 хв)*")
     
-    if st.sidebar.button("🔄 Оновити дані з OSRM зараз"):
+    if st.sidebar.button("🔄 Оновити дані з OSRM зараз", use_container_width=True):
         with st.spinner("Опитування OSRM API..."):
             new_speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
             save_speeds_to_history(new_speeds)
+            st.cache_data.clear()
             st.rerun()
 
     for b_id, spd in bridge_speeds.items():
