@@ -20,7 +20,7 @@ def get_kyiv_now_str():
     return datetime.now(KYIV_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 # =========================================================
-# БЛОК АВТОРИЗАЦІЇ (ПРАЦЮЄ ВХІД З ENTER)
+# БЛОК АВТОРИЗАЦІЇ (ВИПРАВЛЕНО РОБОТУ ENTER)
 # =========================================================
 def check_password():
     try:
@@ -37,9 +37,11 @@ def check_password():
         c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
             st.markdown("### 🔒 Вхід у систему")
-            with st.form("login_form"):
-                username = st.text_input("Логін")
-                password = st.text_input("Пароль", type="password")
+            
+            # Використовуємо st.form, але забезпечуємо обробку Enter
+            with st.form("login_form", clear_on_submit=False):
+                username = st.text_input("Логін", key="input_username")
+                password = st.text_input("Пароль", type="password", key="input_password")
                 submit_button = st.form_submit_button("Увійти", use_container_width=True)
 
                 if submit_button:
@@ -114,47 +116,59 @@ def save_speeds_to_history(speeds_dict):
         })
     df_new = pd.DataFrame(records)
     if os.path.exists(HISTORY_FILE):
-        df_old = pd.read_csv(HISTORY_FILE)
-        df_combined = pd.concat([df_old, df_new], ignore_index=True)
+        try:
+            df_old = pd.read_csv(HISTORY_FILE)
+            df_combined = pd.concat([df_old, df_new], ignore_index=True)
+        except Exception:
+            df_combined = df_new
     else:
         df_combined = df_new
     df_combined.to_csv(HISTORY_FILE, index=False)
 
-@st.cache_data
+# ПРИБРАНО @st.cache_data ДЛЯ ЗАБЕЗПЕЧЕННЯ АКТУАЛЬНОСТІ ДАНИХ
 def load_latest_speeds():
     if not os.path.exists(HISTORY_FILE):
         speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
         save_speeds_to_history(speeds)
         return speeds, get_kyiv_now_str()
     
-    df_hist = pd.read_csv(HISTORY_FILE)
-    if df_hist.empty:
-        speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
-        save_speeds_to_history(speeds)
-        return speeds, get_kyiv_now_str()
-
-    latest_timestamp = df_hist['timestamp'].max()
-    df_latest = df_hist[df_hist['timestamp'] == latest_timestamp]
-    speeds = dict(zip(df_latest['bridge_id'], df_latest['speed']))
-    
-    for b_id, b_info in BRIDGES.items():
-        if b_id not in speeds:
-            speeds[b_id] = b_info['normal_speed']
-            
-    return speeds, latest_timestamp
-
-def background_collector():
-    while True:
-        time.sleep(20 * 60)
-        try:
+    try:
+        df_hist = pd.read_csv(HISTORY_FILE)
+        if df_hist.empty:
             speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
             save_speeds_to_history(speeds)
-        except Exception:
-            pass
+            return speeds, get_kyiv_now_str()
 
-if "collector_started" not in st.session_state:
-    st.session_state["collector_started"] = True
-    threading.Thread(target=background_collector, daemon=True).start()
+        latest_timestamp = df_hist['timestamp'].max()
+        df_latest = df_hist[df_hist['timestamp'] == latest_timestamp]
+        speeds = dict(zip(df_latest['bridge_id'], df_latest['speed']))
+        
+        for b_id, b_info in BRIDGES.items():
+            if b_id not in speeds:
+                speeds[b_id] = b_info['normal_speed']
+                
+        return speeds, latest_timestamp
+    except Exception:
+        speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
+        return speeds, get_kyiv_now_str()
+
+# СТАБІЛЬНИЙ ФОНОВИЙ ЗБИРАЧ ДАНИХ (ЗАХИЩЕНИЙ ВІД ПАДІННЯ ТА ДУБЛЮВАННЯ)
+@st.cache_resource
+def start_background_collector():
+    def background_collector():
+        while True:
+            try:
+                speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
+                save_speeds_to_history(speeds)
+            except Exception:
+                pass
+            time.sleep(20 * 60) # 20 хвилин
+
+    thread = threading.Thread(target=background_collector, daemon=True)
+    thread.start()
+    return True
+
+start_background_collector()
 
 # БЕЗПЕЧНЕ ЗАВАНТАЖЕННЯ EXCEL (ОМИНАЄ БЛОКУВАННЯ)
 @st.cache_data
@@ -226,7 +240,6 @@ if mode == "🤖 Автоматичний (OSRM)":
         with st.spinner("Опитування OSRM API та збереження..."):
             new_speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
             save_speeds_to_history(new_speeds)
-            load_latest_speeds.clear()  # Примусово очищаємо кеш зчитування CSV
             st.rerun()
 
     for b_id, spd in bridge_speeds.items():
@@ -301,32 +314,35 @@ with tab3:
 with tab4:
     st.subheader("📜 Історія вимірювань швидкості")
     if os.path.exists(HISTORY_FILE):
-        df_hist = pd.read_csv(HISTORY_FILE).sort_values(by='timestamp', ascending=False)
-        if not df_hist.empty:
-            selected_bridge = st.selectbox("Оберіть міст для перегляду динаміки:", df_hist['bridge_name'].unique())
-            df_filtered = df_hist[df_hist['bridge_name'] == selected_bridge]
-            
-            fig_line = px.line(
-                df_filtered, 
-                x='timestamp', 
-                y='speed', 
-                title=f"Динаміка швидкості: {selected_bridge}",
-                labels={'timestamp': 'Час заміру', 'speed': 'Швидкість (км/год)'},
-                markers=True
-            )
-            st.plotly_chart(fig_line, use_container_width=True)
-            
-            st.subheader("📊 Повна таблиця зафіксованих замірів")
-            st.dataframe(df_hist, use_container_width=True, hide_index=True)
-            
-            csv_hist = df_hist.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="📥 Завантажити повну історію замірів (CSV)",
-                data=csv_hist,
-                file_name="bridge_speed_history.csv",
-                mime="text/csv"
-            )
-        else:
-            st.info("Історія поки порожня.")
+        try:
+            df_hist = pd.read_csv(HISTORY_FILE).sort_values(by='timestamp', ascending=False)
+            if not df_hist.empty:
+                selected_bridge = st.selectbox("Оберіть міст для перегляду динаміки:", df_hist['bridge_name'].unique())
+                df_filtered = df_hist[df_hist['bridge_name'] == selected_bridge]
+                
+                fig_line = px.line(
+                    df_filtered, 
+                    x='timestamp', 
+                    y='speed', 
+                    title=f"Динаміка швидкості: {selected_bridge}",
+                    labels={'timestamp': 'Час заміру', 'speed': 'Швидкість (км/год)'},
+                    markers=True
+                )
+                st.plotly_chart(fig_line, use_container_width=True)
+                
+                st.subheader("📊 Повна таблиця зафіксованих замірів")
+                st.dataframe(df_hist, use_container_width=True, hide_index=True)
+                
+                csv_hist = df_hist.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label="📥 Завантажити повну історію замірів (CSV)",
+                    data=csv_hist,
+                    file_name="bridge_speed_history.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("Історія поки порожня.")
+        except Exception:
+            st.info("Помилка читання файлу історії.")
     else:
         st.info("Історія поки порожня.")
