@@ -266,7 +266,6 @@ results = recalculate_network(df_options, bridge_status)
 tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Логістичний аналіз мережі", 
     "🌁 Стан мостів", 
-    "🗺️ Карта заторів",
     "📜 Історія та тренди"
 ])
 
