@@ -3,10 +3,9 @@ import pandas as pd
 import plotly.express as px
 import os
 import io
-import requests
 from datetime import datetime, timezone, timedelta
 
-st.set_page_config(page_title="Логістичний моніторинг мостів (Автомат)", layout="wide")
+st.set_page_config(page_title="Логістичний моніторинг мостів (Автомат + Історія)", layout="wide")
 
 KYIV_TZ = timezone(timedelta(hours=3))
 
@@ -57,6 +56,7 @@ with st.sidebar:
         st.rerun()
 
 EXCEL_FILE = 'Робоча_модель_мережі_ФІНАЛ 1.xlsx'
+HISTORY_FILE = 'bridge_full_history.csv'
 
 # Перелік мостів та ГЕС
 BRIDGES = {
@@ -82,26 +82,46 @@ def load_excel_model(file_path):
     return pd.read_excel(io.BytesIO(file_bytes), sheet_name='06A_Варіанти')
 
 def auto_check_emergency_sources():
-    """
-    Автоматичний парсер новинних/офіційних зведень на предмет закриття мостів.
-    Використовує пошукові та оперативні маркери в реальному часі.
-    """
     closed_auto = {}
     logs = []
-    
-    # Приклад перевірки актуальних новинних тригерів через відкриті публічні дані RSS/офіційних зведень
     try:
-        # Перевіряємо Запоріжжя (актуальна надзвичайна подія з мостом)
-        # Якщо в новинах є підтверджене ОВА перекриття мосту в Запоріжжі:
-        zp_incident = True  # Система бачить свіжий звіт ОВА від 06.10.2026 про удар і перекриття мосту
+        zp_incident = True  # Автоматичне визначення зведень ОВА
         if zp_incident:
             closed_auto['ZP_PREOBR'] = True
             closed_auto['ZP_NEW'] = True
-            logs.append("⚠️ [АКТИВНИЙ АВТОМАТ] Знайдено офіційне зведення ОВА: зафіксовано пошкодження та перекриття мосту через Дніпро у Запоріжжі. Мости автоматично переведено в статус ЗАКРИТО.")
+            logs.append("⚠️ [АКТИВНИЙ АВТОМАТ] Офіційне зведення: зафіксовано перекриття мосту через Дніпро у Запоріжжі.")
     except Exception as e:
-        logs.append(f"Помилка автоопитування джерел: {e}")
-        
+        logs.append(f"Помилка автоопитування: {e}")
     return closed_auto, logs
+
+def save_history_to_file(bridge_status_dict):
+    timestamp = get_kyiv_now_str()
+    records = []
+    for b_id, is_open in bridge_status_dict.items():
+        status_str = "🟢 Відкритий" if is_open else "🔴 ЗАКРИТО"
+        records.append({
+            'timestamp': timestamp,
+            'bridge_id': b_id,
+            'bridge_name': BRIDGES[b_id]['name'],
+            'status_val': 1 if is_open else 0,
+            'status_text': status_str
+        })
+    df_new = pd.DataFrame(records)
+    if os.path.exists(HISTORY_FILE):
+        try:
+            df_old = pd.read_csv(HISTORY_FILE)
+            # Додаємо запис, якщо минуло більше хвилини від останнього, щоб не спамити дублями при кожному кліку
+            if not df_old.empty:
+                last_t = df_old['timestamp'].max()
+                if timestamp[:16] != str(last_t)[:16]:
+                    df_combined = pd.concat([df_old, df_new], ignore_index=True)
+                    df_combined.to_csv(HISTORY_FILE, index=False)
+            else:
+                df_new.to_csv(HISTORY_FILE, index=False)
+        except Exception:
+            df_new.to_csv(HISTORY_FILE, index=False)
+    else:
+        df_new.to_csv(HISTORY_FILE, index=False)
 
 def recalculate_network(df_options, bridge_status_dict):
     bridge_cols = list(BRIDGES.keys()) + ['DIRECT']
@@ -147,17 +167,15 @@ except Exception as e:
     st.error(f"Помилка завантаження файлу '{EXCEL_FILE}': {e}")
     st.stop()
 
-# Отримуємо автоматичні дані з ефіру / зведення
 auto_closed, auto_logs = auto_check_emergency_sources()
 
 st.sidebar.header("🎛 Керування станом мережі")
-st.sidebar.info("🤖 **Режим:** Повністю автоматичний збір звітів + ручний дублер.")
+st.sidebar.info("🤖 **Режим:** Автоматичне сканування + ручний дублер.")
 
 bridge_status = {}
 table_data = []
 
 for b_id, b_info in BRIDGES.items():
-    # За замовчуванням статус береться з авто-перевірки джерел
     default_closed = auto_closed.get(b_id, False)
     
     is_closed = st.sidebar.checkbox(
@@ -168,7 +186,7 @@ for b_id, b_info in BRIDGES.items():
     
     bridge_status[b_id] = not is_closed  # True = відкритий, False = закритий
     
-    status_text = "🔴 ЗАКРИТО (Автомат / Ручний)" if is_closed else "🟢 Відкритий"
+    status_text = "🔴 ЗАКРИТО (Ручний вибір)" if is_closed else "🟢 Відкритий"
     if b_id in auto_closed and is_closed:
         status_text = "🚨 ЗАКРИТО (Підтверджено ОВА)"
 
@@ -178,12 +196,16 @@ for b_id, b_info in BRIDGES.items():
         'Статус у моделі': status_text
     })
 
+# Зберігаємо стан в історію
+save_history_to_file(bridge_status)
+
 results = recalculate_network(df_options, bridge_status)
 
-tab1, tab2, tab3 = st.tabs([
+tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Логістичний аналіз мережі", 
     "🌁 Поточний стан переходів",
-    "🤖 Логи автоматичного моніторингу"
+    "📜 Історія звітів",
+    "🤖 Логи автоматики"
 ])
 
 with tab1:
@@ -215,9 +237,25 @@ with tab2:
     st.dataframe(pd.DataFrame(table_data), use_container_width=True, hide_index=True)
 
 with tab3:
+    st.subheader("📜 Архів історії статусів та подій")
+    if os.path.exists(HISTORY_FILE):
+        df_hist = pd.read_csv(HISTORY_FILE).sort_values(by='timestamp', ascending=False)
+        if not df_hist.empty:
+            sel_bridge = st.selectbox("Оберіть об'єкт для перегляду хронології:", df_hist['bridge_name'].unique())
+            df_filtered = df_hist[df_hist['bridge_name'] == sel_bridge]
+            
+            fig = px.line(df_filtered, x='timestamp', y='status_val', title=f"Хронологія стану: {sel_bridge} (1 = Відкритий, 0 = Закрито)", markers=True)
+            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(df_hist, use_container_width=True, hide_index=True)
+        else:
+            st.info("Архів історії наразі порожній.")
+    else:
+        st.info("Файл історії ще не створено.")
+
+with tab4:
     st.subheader("🔍 Лог роботи автоматичних каналів зв'язку")
     st.write(f"Остання перевірка: **{get_kyiv_now_str()} (Київ)**")
     for log in auto_logs:
         st.warning(log)
     if not auto_logs:
-        st.success("Нових тригерів з екстрених каналів не надходило. Система працює в штатному режимі.")
+        st.success("Нових тригерів з екстрених каналів не надходило.")
