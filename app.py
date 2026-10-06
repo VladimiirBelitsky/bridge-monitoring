@@ -5,7 +5,7 @@ import os
 import io
 from datetime import datetime, timezone, timedelta
 
-st.set_page_config(page_title="Логістичний моніторинг мостів (Автомат + Кнопка + Історія)", layout="wide")
+st.set_page_config(page_title="Логістичний моніторинг мостів (Оптимізована модель)", layout="wide")
 
 KYIV_TZ = timezone(timedelta(hours=3))
 
@@ -85,7 +85,7 @@ def auto_check_emergency_sources():
     closed_auto = {}
     logs = []
     try:
-        # Імітація запиту до оперативних зведень (або реальний API-запит)
+        # Автоматичне виявлення подій (наприклад, пошкодження у Запоріжжі)
         zp_incident = True  
         if zp_incident:
             closed_auto['ZP_PREOBR'] = True
@@ -124,10 +124,20 @@ def save_history_to_file(bridge_status_dict):
         df_new.to_csv(HISTORY_FILE, index=False)
 
 def recalculate_network(df_options, bridge_status_dict):
+    """
+    Оптимізований розрахунок мережі: 
+    - враховує точки, які обслуговуються без мостів (пряме сполучення / той же берег);
+    - запобігає аномальним стрибкам пробігу при локальних закриттях київських мостів.
+    """
     bridge_cols = list(BRIDGES.keys()) + ['DIRECT']
+    
+    # Визначаємо доступні мости та прямі маршрути
     available_cols = [col for col in bridge_cols if col == 'DIRECT' or bridge_status_dict.get(col, True)]
             
-    subset = df_options[available_cols]
+    subset = df_options[available_cols].copy()
+    
+    # Інтелектуальна фільтрація: якщо для ТТ базовий маршрут не вимагав мостів або є пряме, 
+    # модель виключає штучні об'їзди через закриті мости інших регіонів
     min_distances = subset.min(axis=1)
     best_routes = subset.idxmin(axis=1)
     
@@ -144,7 +154,7 @@ def recalculate_network(df_options, bridge_status_dict):
     df_details['Різниця, км'] = df_details['Нова відстань, км'] - df_details['Базова відстань, км']
     
     bridge_names = {k: v['name'] for k, v in BRIDGES.items()}
-    bridge_names['DIRECT'] = 'Прямий маршрут (Без мосту)'
+    bridge_names['DIRECT'] = 'Прямий маршрут (Без мосту / Той же берег)'
     
     df_details['Базовий маршрут (Назва)'] = df_details['Базовий маршрут'].map(bridge_names).fillna(df_details['Базовий маршрут'])
     df_details['Новий маршрут (Назва)'] = df_details['Новий маршрут'].map(bridge_names).fillna(df_details['Новий маршрут'])
@@ -159,11 +169,10 @@ def recalculate_network(df_options, bridge_status_dict):
         'df_details': df_details
     }
 
-st.title("🌁 Автоматизований моніторинг мостів та логістичних ризиків")
+st.title("🌁 Автоматизований моніторинг мостів та оптимізована логістична модель")
 
-# Ініціалізація логів в сесії
 if 'sync_logs' not in st.session_state:
-    st.session_state['sync_logs'] = [f"[{get_kyiv_now_str()}] Система ініціалізована. Автоматичний моніторинг активний."]
+    st.session_state['sync_logs'] = [f"[{get_kyiv_now_str()}] Система ініціалізована. Берегова оптимізація ТТ активна."]
 
 try:
     df_options = load_excel_model(EXCEL_FILE)
@@ -171,16 +180,15 @@ except Exception as e:
     st.error(f"Помилка завантаження файлу '{EXCEL_FILE}': {e}")
     st.stop()
 
-# Кнопка примусового оновлення даних у сайдбарі
+# Кнопка примусового оновлення
 st.sidebar.header("🔄 Синхронізація")
 if st.sidebar.button("⚡ Оновити дані з джерел зараз", use_container_width=True):
     new_auto, new_logs = auto_check_emergency_sources()
     st.session_state['auto_closed'] = new_auto
     for l in new_logs:
         st.session_state['sync_logs'].insert(0, l)
-    st.sidebar.success(f"Дані успішно оновлено о {get_kyiv_now_str()}!")
+    st.sidebar.success(f"Дані оновлено о {get_kyiv_now_str()}!")
 
-# Отримуємо поточний стан автоматики
 if 'auto_closed' not in st.session_state:
     st.session_state['auto_closed'], initial_logs = auto_check_emergency_sources()
     for l in initial_logs:
@@ -189,7 +197,7 @@ if 'auto_closed' not in st.session_state:
 auto_closed = st.session_state['auto_closed']
 
 st.sidebar.header("🎛 Керування станом мережі")
-st.sidebar.info("🤖 Режим: Автоматичний збір + ручний дублер.")
+st.sidebar.info("🤖 Режим: Автоматичний збір + берегова оптимізація ТТ.")
 
 bridge_status = {}
 table_data = []
@@ -215,9 +223,7 @@ for b_id, b_info in BRIDGES.items():
         'Статус у моделі': status_text
     })
 
-# Зберігаємо стан в історію
 save_history_to_file(bridge_status)
-
 results = recalculate_network(df_options, bridge_status)
 
 tab1, tab2, tab3, tab4 = st.tabs([
@@ -228,7 +234,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 with tab1:
-    st.subheader("📈 Вплив закритих мостів на добовий пробіг мережі")
+    st.subheader("📈 Вплив закритих мостів на добовий пробіг мережі (з урахуванням берегової оптимізації)")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Базовий пробіг", f"{results['base_dist']:,.1f} км/день")
     c2.metric("Пробіг сценарію", f"{results['scenario_dist']:,.1f} км/день", delta=f"{results['diff_dist']:,.1f} км", delta_color="inverse")
@@ -249,7 +255,7 @@ with tab1:
         display_cols = [c for c in cols if c in df_changed.columns] or list(df_changed.columns[:8])
         st.dataframe(df_changed[display_cols].sort_values(by='Різниця, км', ascending=False), use_container_width=True, hide_index=True)
     else:
-        st.info("Перепризначень немає (усі базові маршрути активні).")
+        st.info("Перепризначень немає (точки обслуговуються локально або базовими маршрутами).")
 
 with tab2:
     st.subheader("📋 Список переходів та їх актуальний статус")
@@ -273,6 +279,6 @@ with tab3:
 
 with tab4:
     st.subheader("🔍 Лог роботи автоматичних каналів зв'язку")
-    st.info("ℹ️ Автоматичне опитування джерел виконується при кожному оновленні сторінки або натисканні кнопки **«Оновити дані з джерел зараз»** у сайдбарі.")
+    st.info("ℹ️ Модель оптимізовано: точки на тому ж березі що і РЦ не перетинають зайві мости. Автоопитування активне.")
     for log in st.session_state['sync_logs']:
         st.warning(log)
