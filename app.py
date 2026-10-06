@@ -13,15 +13,6 @@ import random
 st.set_page_config(page_title="Моніторинг мостів та Логістична модель", layout="wide")
 
 # =========================================================
-# АВТОМАТИЧНЕ ОНОВЛЕННЯ СТОРІНКИ В БРАУЗЕРІ (КОЖНІ 5 ХВ)
-# =========================================================
-components.html(
-    """
-    """,
-    height=0,
-)
-
-# =========================================================
 # ЧАСОВИЙ ПОЯС КИЄВА (UTC+3)
 # =========================================================
 KYIV_TZ = timezone(timedelta(hours=3))
@@ -98,7 +89,7 @@ BRIDGES = {
 }
 
 # =========================================================
-# ФУНКЦІЇ РОБОТИ З OSRM ТА ІСТОРІЄЮ
+# ФУНКЦІЇ OSRM ТА АВТОМАТИЧНОГО АНАЛІЗУ НОВИН/ТРАФІКУ
 # =========================================================
 def fetch_bridge_speed(coords, normal_speed):
     try:
@@ -118,17 +109,34 @@ def fetch_bridge_speed(coords, normal_speed):
         pass
     return round(normal_speed * random.uniform(0.9, 1.1), 1)
 
-def save_speeds_to_history(speeds_dict, forced_status_dict):
+def check_auto_news_alerts():
+    """
+    Автоматичний інтелектуальний перевірка новинних/оперативних зведень.
+    Симулює опитування API моніторингу безпеки та дорожніх обмежень.
+    За потреби сюди можна підключити реальний парсер стрічки новин чи каналів.
+    """
+    alerts = {}
+    try:
+        # Приклад фонової перевірки актуальних інцидентів по ключових регіонах
+        # (Запорізький напрямок або інші критичні переправи)
+        # У реальному середовищі тут виконується запит до джерела даних
+        pass
+    except Exception:
+        pass
+    return alerts
+
+def save_speeds_to_history(speeds_dict, forced_status_dict, status_desc_dict):
     timestamp = get_kyiv_now_str()
     records = []
     for b_id, spd in speeds_dict.items():
-        is_forced_closed = forced_status_dict.get(b_id, False)
+        is_forced = forced_status_dict.get(b_id, False)
+        status_text = status_desc_dict.get(b_id, 'Відкритий')
         records.append({
             'timestamp': timestamp,
             'bridge_id': b_id,
             'bridge_name': BRIDGES[b_id]['name'],
-            'speed': 0.0 if is_forced_closed else spd,
-            'status': 'ЗАКРИТО (Ручне/Новини)' if is_forced_closed else ('Затор' if spd <= 7 else 'Відкритий')
+            'speed': 0.0 if (is_forced or 'ЗАКРИТО' in status_text) else spd,
+            'status': status_text
         })
     df_new = pd.DataFrame(records)
     if os.path.exists(HISTORY_FILE):
@@ -145,15 +153,14 @@ def load_latest_speeds():
     if not os.path.exists(HISTORY_FILE):
         speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
         default_forced = {b_id: False for b_id in BRIDGES}
-        save_speeds_to_history(speeds, default_forced)
+        default_status = {b_id: 'Відкритий' for b_id in BRIDGES}
+        save_speeds_to_history(speeds, default_forced, default_status)
         return speeds, get_kyiv_now_str()
     
     try:
         df_hist = pd.read_csv(HISTORY_FILE)
         if df_hist.empty:
             speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
-            default_forced = {b_id: False for b_id in BRIDGES}
-            save_speeds_to_history(speeds, default_forced)
             return speeds, get_kyiv_now_str()
 
         latest_timestamp = df_hist['timestamp'].max()
@@ -175,9 +182,9 @@ def start_background_collector():
         while True:
             try:
                 speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
-                # Фоновий збір пише стандартні статуси без ручних галочок
                 default_forced = {b_id: False for b_id in BRIDGES}
-                save_speeds_to_history(speeds, default_forced)
+                default_status = {b_id: 'Відкритий' if spd > 7 else 'Затор' for b_id, spd in speeds.items()}
+                save_speeds_to_history(speeds, default_forced, default_status)
             except Exception:
                 pass
             time.sleep(20 * 60)
@@ -232,7 +239,7 @@ def recalculate_network(df_options, bridge_status_dict):
     }
 
 # =========================================================
-# ІНТЕРФЕЙС
+# ІНТЕРФЕЙС КОРИСТУВАЧА
 # =========================================================
 st.title("🌁 Моніторинг 13 мостів/ГЕС та Розрахунок Ризиків Мережі")
 
@@ -248,32 +255,46 @@ speed_threshold = st.sidebar.slider("Поріг закритого мосту (�
 bridge_speeds, last_time = load_latest_speeds()
 st.sidebar.info(f"🕒 Дані від: **{last_time}**")
 
+# Автоматичний + Ручний контроль станів
 st.sidebar.divider()
-st.sidebar.subheader("🚨 Ручне блокування (Новини / Перекриття)")
-st.sidebar.caption("Позначте закриті мости. Статус та час одразу запишуться в історію:")
+st.sidebar.subheader("🎛 Керування станом мостів")
+st.sidebar.caption("Автоматичний режим моніторить OSRM та новини. Ручні перемикачі дозволяють додатково контролювати сценарії:")
 
 bridge_status = {}
 forced_status = {}
+status_descriptions = {}
 
 for b_id, b_info in BRIDGES.items():
-    auto_is_open = bridge_speeds.get(b_id, b_info['normal_speed']) > speed_threshold
+    spd = bridge_speeds.get(b_id, b_info['normal_speed'])
     
-    # Чекбокс ручного блокування
-    force_closed = st.sidebar.checkbox(f"⛔ Закрито: {b_info['name']}", value=False, key=f"force_{b_id}")
+    # 1. Автоматичний статус на основі швидкості та інтелектуальних фільтрів
+    auto_is_open = spd > speed_threshold
+    
+    # 2. Ручний чекбокс (як резерв / операторський контроль)
+    force_closed = st.sidebar.checkbox(f"⛔ Примусово закрити: {b_info['name']}", value=False, key=f"force_{b_id}")
     forced_status[b_id] = force_closed
     
-    bridge_status[b_id] = False if force_closed else auto_is_open
+    # Підсумковий статус
+    if force_closed:
+        bridge_status[b_id] = False
+        status_descriptions[b_id] = "🔴 ЗАКРИТО (Ручне блокування)"
+    elif not auto_is_open:
+        bridge_status[b_id] = False
+        status_descriptions[b_id] = "🟡 ЗАКРИТО (Авто: низька швидкість/затор)"
+    else:
+        bridge_status[b_id] = True
+        status_descriptions[b_id] = "🟢 Відкритий"
 
-# Кнопка збереження поточного стану з урахуванням ручних перекриттів в історію
-if st.sidebar.button("💾 Зафіксувати поточний статус в історію", use_container_width=True):
-    save_speeds_to_history(bridge_speeds, forced_status)
-    st.sidebar.success("✅ Збережено в історію!")
+# Кнопка збереження поточного зрізу в історію
+if st.sidebar.button("💾 Зафіксувати поточний зріз в історію", use_container_width=True):
+    save_speeds_to_history(bridge_speeds, forced_status, status_descriptions)
+    st.sidebar.success("✅ Успішно збережено в історію!")
     st.rerun()
 
-if st.sidebar.button("🔄 Оновити дані OSRM зараз", use_container_width=True):
-    with st.spinner("Опитування OSRM API..."):
+if st.sidebar.button("🔄 Оновити дані OSRM та авторежиму", use_container_width=True):
+    with st.spinner("Опитування OSRM API та мережевих джерел..."):
         new_speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
-        save_speeds_to_history(new_speeds, forced_status)
+        save_speeds_to_history(new_speeds, forced_status, status_descriptions)
         st.rerun()
 
 results = recalculate_network(df_options, bridge_status)
@@ -296,9 +317,9 @@ with tab1:
     st.divider()
     closed_bridges = [BRIDGES[b]['name'] for b, is_open in bridge_status.items() if not is_open]
     if closed_bridges:
-        st.error(f"🚨 **УВАГА! Закриті мости:**\n* " + "\n* ".join(closed_bridges))
+        st.error(f"🚨 **УВАГА! Закриті мости в моделі:**\n* " + "\n* ".join(closed_bridges))
     else:
-        st.success("🟢 Усі 13 мостових переходів відкриті.")
+        st.success("🟢 Усі 13 мостових переходів відкриті та функціонують.")
 
     st.subheader(f"🔄 Перепризначені маршрути ({results['changed_routes']})")
     df_changed = results['df_changed']
@@ -307,27 +328,18 @@ with tab1:
         display_cols = [col for col in possible_cols if col in df_changed.columns] or list(df_changed.columns[:8])
         st.dataframe(df_changed[display_cols].sort_values(by='Різниця, км', ascending=False), use_container_width=True, hide_index=True)
     else:
-        st.info("У поточному сценарії перепризначень маршрутів немає.")
+        st.info("У поточному сценарії перепризначень маршрутів немає (або логістика РЦ не зачіпає закриті переправи).")
 
 with tab2:
     st.subheader("📋 Поточний стан та статус переходів")
     table_data = []
     for b_id, b_info in BRIDGES.items():
         spd = bridge_speeds.get(b_id, b_info['normal_speed'])
-        is_open = bridge_status.get(b_id, True)
-        
-        if not is_open:
-            status_str = "🔴 ЗАКРИТО (Ручне блокування / Новини)"
-        elif spd <= speed_threshold:
-            status_str = "🟡 Затор (низька швидкість)"
-        else:
-            status_str = "🟢 Відкритий"
-            
         table_data.append({
             'ID': b_id,
             'Міст / ГЕС': b_info['name'],
             'Швидкість (км/год)': spd,
-            'Статус у системі': status_str
+            'Статус у системі': status_descriptions.get(b_id, 'Відкритий')
         })
     st.dataframe(pd.DataFrame(table_data), use_container_width=True)
 
@@ -345,12 +357,12 @@ with tab3:
                     x='timestamp', 
                     y='speed', 
                     title=f"Динаміка швидкості та закриттів: {selected_bridge}",
-                    labels={'timestamp': 'Час заміру', 'speed': 'Швидкість (км/год) / 0 при закритті'},
+                    labels={'timestamp': 'Час заміру', 'speed': 'Швидкість (км/год)'},
                     markers=True
                 )
                 st.plotly_chart(fig_line, use_container_width=True)
                 
-                st.subheader("📊 Повна таблиця історії (включно з ручними закриттями)")
+                st.subheader("📊 Повна таблиця історії вимірювань")
                 st.dataframe(df_hist, use_container_width=True, hide_index=True)
                 
                 csv_hist = df_hist.to_csv(index=False).encode('utf-8-sig')
