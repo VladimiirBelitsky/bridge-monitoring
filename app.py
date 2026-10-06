@@ -7,22 +7,14 @@ import threading
 import time
 import io
 from datetime import datetime, timezone, timedelta
-import random
-import re
 
 st.set_page_config(page_title="Автономний логістичний моніторинг мостів", layout="wide")
 
-# =========================================================
-# ЧАСОВИЙ ПОЯС КИЄВА (UTC+3)
-# =========================================================
 KYIV_TZ = timezone(timedelta(hours=3))
 
 def get_kyiv_now_str():
     return datetime.now(KYIV_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
-# =========================================================
-# БЛОК АВТОРИЗАЦІЇ
-# =========================================================
 def check_password():
     try:
         correct_user = st.secrets.get("credentials", {}).get("username", "admin")
@@ -66,31 +58,25 @@ with st.sidebar:
         st.session_state["password_correct"] = False
         st.rerun()
 
-# =========================================================
-# БАЗА ДАНИХ 13 МОСТІВ ТА ГЕС (З РОЗШИРЕНИМИ ТРИГЕРАМИ)
-# =========================================================
 EXCEL_FILE = 'Робоча_модель_мережі_ФІНАЛ 1.xlsx'
 HISTORY_FILE = 'bridge_history.csv'
 
 BRIDGES = {
-    'KYI_DARN': {'name': 'Дарницький міст (Київ)', 'coords': [(30.5891, 50.4168), (30.5978, 50.4152)], 'normal_speed': 50, 'query': 'Дарницький міст Київ перекрито удар аварія'},
-    'KYI_SOUTH': {'name': 'Південний міст (Київ)', 'coords': [(30.5621, 50.3942), (30.5789, 50.3921)], 'normal_speed': 60, 'query': 'Південний міст Київ перекрито обмежено рух'},
-    'KYI_NORTH': {'name': 'Північний міст (Київ)', 'coords': [(30.5352, 50.4908), (30.5521, 50.4912)], 'normal_speed': 60, 'query': 'Північний міст Київ перекрито аварія'},
-    'KYI_HPP': {'name': 'Київська ГЕС (Вишгород)', 'coords': [(30.4912, 50.5885), (30.5051, 50.5889)], 'normal_speed': 40, 'query': 'Київська ГЕС Вишгород пошкоджено перекрито'},
-    'KANIV_HPP': {'name': 'Канівська ГЕС (Канів)', 'coords': [(31.4682, 49.7612), (31.4791, 49.7625)], 'normal_speed': 50, 'query': 'Канівська ГЕС перекрито удар'},
-    'CHK': {'name': 'Черкаський міст (Черкаси)', 'coords': [(32.0321, 49.4812), (32.0612, 49.4951)], 'normal_speed': 50, 'query': 'Черкаський міст через Дніпро перекрито аварія'},
-    'KREM': {'name': 'Кременчуцький міст (Кременчук)', 'coords': [(33.4112, 49.0521), (33.4215, 49.0582)], 'normal_speed': 40, 'query': 'Кременчуцький міст перекрито пошкоджено'},
-    'KAM_HPP': {'name': "Середньодніпровська ГЕС (Кам'янське)", 'coords': [(34.5421, 48.5521), (34.5512, 48.5582)], 'normal_speed': 40, 'query': "Середньодніпровська ГЕС Кам'янське перекрито"},
-    'DNI_AMUR': {'name': 'Амурський міст (Дніпро)', 'coords': [(35.0251, 48.4851), (35.0298, 48.4891)], 'normal_speed': 40, 'query': 'Амурський міст Дніпро перекрито аварія'},
-    'DNI_CENTR': {'name': 'Центральний міст (Дніпро)', 'coords': [(35.0512, 48.4712), (35.0589, 48.4782)], 'normal_speed': 50, 'query': 'Центральний міст Дніпро перекрито'},
-    'DNI_SOUTH': {'name': 'Південний міст (Дніпро)', 'coords': [(35.1012, 48.4112), (35.1089, 48.4082)], 'normal_speed': 50, 'query': 'Південний міст Дніпро перекрито удар'},
-    'ZP_PREOBR': {'name': 'Мости Преображенського (Запоріжжя)', 'coords': [(35.0812, 47.8312), (35.0921, 47.8351)], 'normal_speed': 40, 'query': 'Мости Преображенського Запоріжжя перекрито удар пошкоджено'},
-    'ZP_NEW': {'name': 'Нові мостові переходи (Запоріжжя)', 'coords': [(35.0712, 47.8412), (35.0851, 47.8451)], 'normal_speed': 50, 'query': 'нові мости Запоріжжя перекрито рух удар'}
+    'KYI_DARN': {'name': 'Дарницький міст (Київ)', 'coords': [(30.5891, 50.4168), (30.5978, 50.4152)], 'normal_speed': 50},
+    'KYI_SOUTH': {'name': 'Південний міст (Київ)', 'coords': [(30.5621, 50.3942), (30.5789, 50.3921)], 'normal_speed': 60},
+    'KYI_NORTH': {'name': 'Північний міст (Київ)', 'coords': [(30.5352, 50.4908), (30.5521, 50.4912)], 'normal_speed': 60},
+    'KYI_HPP': {'name': 'Київська ГЕС (Вишгород)', 'coords': [(30.4912, 50.5885), (30.5051, 50.5889)], 'normal_speed': 40},
+    'KANIV_HPP': {'name': 'Канівська ГЕС (Канів)', 'coords': [(31.4682, 49.7612), (31.4791, 49.7625)], 'normal_speed': 50},
+    'CHK': {'name': 'Черкаський міст (Черкаси)', 'coords': [(32.0321, 49.4812), (32.0612, 49.4951)], 'normal_speed': 50},
+    'KREM': {'name': 'Кременчуцький міст (Кременчук)', 'coords': [(33.4112, 49.0521), (33.4215, 49.0582)], 'normal_speed': 40},
+    'KAM_HPP': {'name': "Середньодніпровська ГЕС (Кам'янське)", 'coords': [(34.5421, 48.5521), (34.5512, 48.5582)], 'normal_speed': 40},
+    'DNI_AMUR': {'name': 'Амурський міст (Дніпро)', 'coords': [(35.0251, 48.4851), (35.0298, 48.4891)], 'normal_speed': 40},
+    'DNI_CENTR': {'name': 'Центральний міст (Дніпро)', 'coords': [(35.0512, 48.4712), (35.0589, 48.4782)], 'normal_speed': 50},
+    'DNI_SOUTH': {'name': 'Південний міст (Дніпро)', 'coords': [(35.1012, 48.4112), (35.1089, 48.4082)], 'normal_speed': 50},
+    'ZP_PREOBR': {'name': 'Мости Преображенського (Запоріжжя)', 'coords': [(35.0812, 47.8312), (35.0921, 47.8351)], 'normal_speed': 40},
+    'ZP_NEW': {'name': 'Нові мостові переходи (Запоріжжя)', 'coords': [(35.0712, 47.8412), (35.0851, 47.8451)], 'normal_speed': 50}
 }
 
-# =========================================================
-# ГЛИБОКИЙ АВТОМАТИЧНИЙ АНАЛІЗАТОР (OSRM + MULTI-SOURCE SEARCH)
-# =========================================================
 def fetch_bridge_speed(coords, normal_speed):
     try:
         lon1, lat1 = coords[0]
@@ -109,39 +95,14 @@ def fetch_bridge_speed(coords, normal_speed):
 
 def smart_autonomous_check(b_id, b_info, speed_threshold):
     """
-    Повністю автономна перевірка: аналізує швидкість через OSRM 
-    ТА шукає критичні згадки у відкритих джерелах/новинах.
+    Адекватна перевірка: головним критерієм є реальна швидкість транспортного потоку через OSRM. 
+    Якщо швидкість падає нижче критичного порогу — об'єкт вважається заблокованим.
     """
     spd = fetch_bridge_speed(b_info['coords'], b_info['normal_speed'])
     
-    # Пошуковий запит для виявлення екстрених зведень (удар, перекриття, пошкодження)
-    is_emergency_detected = False
-    emergency_reason = ""
-    
-    try:
-        url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(b_info['query'] + ' сьогодні новини')}"
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        response = requests.get(url, headers=headers, timeout=4)
-        if response.status_code == 200:
-            html_lower = response.text.lower()
-            critical_keywords = [
-                'перекрито', 'обмежено рух', 'рух перекрито', 'рух заборонено', 
-                'удар', 'влучання', 'пошкоджено міст', 'аварійне перекриття', 
-                'зруйновано', 'вибух', 'приліт'
-            ]
-            for kw in critical_keywords:
-                if kw in html_lower:
-                    is_emergency_detected = True
-                    emergency_reason = f"Сигнал тривоги в джерелах: '{kw}'"
-                    break
-    except Exception:
-        pass
-
-    # Визначення фінального статусу
-    if is_emergency_detected:
-        return 0.0, f"🔴 ЗАКРИТО (Авто-моніторинг: {emergency_reason})"
-    elif spd <= speed_threshold:
-        return spd, f"🟡 ЗАКРИТО (Авто: критичне падіння швидкості до {spd} км/год)"
+    # Якщо швидкість менша або дорівнює пороговій (наприклад, затор або перекриття)
+    if spd <= speed_threshold:
+        return spd, f"🔴 ЗАКРИТО (Критичне падіння швидкості до {spd} км/год)"
     else:
         return spd, "🟢 Відкритий"
 
@@ -191,7 +152,6 @@ def load_or_run_initial_check(speed_threshold):
     except Exception:
         return {}, get_kyiv_now_str()
 
-# Автоматичний фоновий потік оновлення даних кожні 10 хвилин
 @st.cache_resource
 def start_background_collector():
     def background_loop():
@@ -199,7 +159,7 @@ def start_background_collector():
             try:
                 payload = {}
                 for b_id, b_info in BRIDGES.items():
-                    spd, status = smart_autonomous_check(b_id, b_info, 7.0)
+                    spd, status = smart_autonomous_check(b_id, b_info, 5.0)
                     payload[b_id] = {'speed': spd, 'status': status}
                 save_speeds_to_history(payload)
             except Exception:
@@ -254,9 +214,6 @@ def recalculate_network(df_options, bridge_status_dict):
         'df_details': df_details
     }
 
-# =========================================================
-# ІНТЕРФЕЙС
-# =========================================================
 st.title("🌁 Автономний моніторинг мостів та логістичних ризиків")
 
 try:
@@ -266,13 +223,13 @@ except Exception as e:
     st.stop()
 
 st.sidebar.header("⚙ Налаштування системи")
-speed_threshold = st.sidebar.slider("Поріг швидкості затору (км/год):", min_value=3, max_value=12, value=7)
+speed_threshold = st.sidebar.slider("Поріг швидкості затору (км/год):", min_value=2, max_value=10, value=5)
 
 current_payload, last_time = load_or_run_initial_check(speed_threshold)
 st.sidebar.info(f"🕒 Авто-синхронізація: **{last_time}**")
 
-if st.sidebar.button("🔄 Оновити всі дані (Сканувати мережу та новини)", use_container_width=True):
-    with st.spinner("Пошук нових загроз та аналіз пропускної здатності мостів..."):
+if st.sidebar.button("🔄 Оновити дані мережі", use_container_width=True):
+    with st.spinner("Перевірка пропускної здатності мостів..."):
         new_payload = {}
         for b_id, b_info in BRIDGES.items():
             spd, status = smart_autonomous_check(b_id, b_info, speed_threshold)
@@ -297,7 +254,6 @@ for b_id, b_info in BRIDGES.items():
 
 results = recalculate_network(df_options, bridge_status)
 
-# Вкладки
 tab1, tab2, tab3 = st.tabs([
     "📊 Логістичний аналіз мережі", 
     "🌁 Стан мостів (Авто-моніторинг)", 
@@ -317,7 +273,7 @@ with tab1:
     if closed_bridges:
         st.error(f"🚨 **УВАГА! У модель закладено перекриття:**\n* " + "\n* ".join(closed_bridges))
     else:
-        st.success("🟢 Усі мости функціонують.")
+        st.success("🟢 Усі мости функціонують у штатному режимі.")
 
     st.subheader(f"🔄 Перепризначені маршрути ({results['changed_routes']})")
     df_changed = results['df_changed']
