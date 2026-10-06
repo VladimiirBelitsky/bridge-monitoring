@@ -8,8 +8,9 @@ import time
 import io
 from datetime import datetime, timezone, timedelta
 import random
+import re
 
-st.set_page_config(page_title="Моніторинг мостів та Логістична модель", layout="wide")
+st.set_page_config(page_title="Автономний логістичний моніторинг мостів", layout="wide")
 
 # =========================================================
 # ЧАСОВИЙ ПОЯС КИЄВА (UTC+3)
@@ -66,29 +67,29 @@ with st.sidebar:
         st.rerun()
 
 # =========================================================
-# СТРУКТУРА 13 МОСТІВ ТА ГЕС
+# БАЗА ДАНИХ 13 МОСТІВ ТА ГЕС (З РОЗШИРЕНИМИ ТРИГЕРАМИ)
 # =========================================================
 EXCEL_FILE = 'Робоча_модель_мережі_ФІНАЛ 1.xlsx'
 HISTORY_FILE = 'bridge_history.csv'
 
 BRIDGES = {
-    'KYI_DARN': {'name': 'Дарницький міст (Київ)', 'coords': [(30.5891, 50.4168), (30.5978, 50.4152)], 'normal_speed': 50, 'search_query': 'Дарницький міст перекрито обмежено рух аварія'},
-    'KYI_SOUTH': {'name': 'Південний міст (Київ)', 'coords': [(30.5621, 50.3942), (30.5789, 50.3921)], 'normal_speed': 60, 'search_query': 'Південний міст Київ перекрито обмежено рух'},
-    'KYI_NORTH': {'name': 'Північний міст (Київ)', 'coords': [(30.5352, 50.4908), (30.5521, 50.4912)], 'normal_speed': 60, 'search_query': 'Північний міст Київ перекрито обмежено рух'},
-    'KYI_HPP': {'name': 'Київська ГЕС (Вишгород)', 'coords': [(30.4912, 50.5885), (30.5051, 50.5889)], 'normal_speed': 40, 'search_query': 'Київська ГЕС Вишгород перекрито рух'},
-    'KANIV_HPP': {'name': 'Канівська ГЕС (Канів)', 'coords': [(31.4682, 49.7612), (31.4791, 49.7625)], 'normal_speed': 50, 'search_query': 'Канівська ГЕС перекрито рух'},
-    'CHK': {'name': 'Черкаський міст (Черкаси)', 'coords': [(32.0321, 49.4812), (32.0612, 49.4951)], 'normal_speed': 50, 'search_query': 'Черкаський міст через Дніпро перекрито обмежено'},
-    'KREM': {'name': 'Кременчуцький міст (Кременчук)', 'coords': [(33.4112, 49.0521), (33.4215, 49.0582)], 'normal_speed': 40, 'search_query': 'Кременчуцький міст перекрито рух'},
-    'KAM_HPP': {'name': "Середньодніпровська ГЕС (Кам'янське)", 'coords': [(34.5421, 48.5521), (34.5512, 48.5582)], 'normal_speed': 40, 'search_query': "Середньодніпровська ГЕС Кам'янське перекрито"},
-    'DNI_AMUR': {'name': 'Амурський міст (Дніпро)', 'coords': [(35.0251, 48.4851), (35.0298, 48.4891)], 'normal_speed': 40, 'search_query': 'Амурський міст Дніпро перекрито аварія'},
-    'DNI_CENTR': {'name': 'Центральний міст (Дніпро)', 'coords': [(35.0512, 48.4712), (35.0589, 48.4782)], 'normal_speed': 50, 'search_query': 'Центральний міст Дніпро перекрито обмежено'},
-    'DNI_SOUTH': {'name': 'Південний міст (Дніпро)', 'coords': [(35.1012, 48.4112), (35.1089, 48.4082)], 'normal_speed': 50, 'search_query': 'Південний міст Дніпро перекрито'},
-    'ZP_PREOBR': {'name': 'Мости Преображенського (Запоріжжя)', 'coords': [(35.0812, 47.8312), (35.0921, 47.8351)], 'normal_speed': 40, 'search_query': 'Мости Преображенського Запоріжжя перекрито обмежено'},
-    'ZP_NEW': {'name': 'Нові мостові переходи (Запоріжжя)', 'coords': [(35.0712, 47.8412), (35.0851, 47.8451)], 'normal_speed': 50, 'search_query': 'нові мости Запоріжжя перекрито рух'}
+    'KYI_DARN': {'name': 'Дарницький міст (Київ)', 'coords': [(30.5891, 50.4168), (30.5978, 50.4152)], 'normal_speed': 50, 'query': 'Дарницький міст Київ перекрито удар аварія'},
+    'KYI_SOUTH': {'name': 'Південний міст (Київ)', 'coords': [(30.5621, 50.3942), (30.5789, 50.3921)], 'normal_speed': 60, 'query': 'Південний міст Київ перекрито обмежено рух'},
+    'KYI_NORTH': {'name': 'Північний міст (Київ)', 'coords': [(30.5352, 50.4908), (30.5521, 50.4912)], 'normal_speed': 60, 'query': 'Північний міст Київ перекрито аварія'},
+    'KYI_HPP': {'name': 'Київська ГЕС (Вишгород)', 'coords': [(30.4912, 50.5885), (30.5051, 50.5889)], 'normal_speed': 40, 'query': 'Київська ГЕС Вишгород пошкоджено перекрито'},
+    'KANIV_HPP': {'name': 'Канівська ГЕС (Канів)', 'coords': [(31.4682, 49.7612), (31.4791, 49.7625)], 'normal_speed': 50, 'query': 'Канівська ГЕС перекрито удар'},
+    'CHK': {'name': 'Черкаський міст (Черкаси)', 'coords': [(32.0321, 49.4812), (32.0612, 49.4951)], 'normal_speed': 50, 'query': 'Черкаський міст через Дніпро перекрито аварія'},
+    'KREM': {'name': 'Кременчуцький міст (Кременчук)', 'coords': [(33.4112, 49.0521), (33.4215, 49.0582)], 'normal_speed': 40, 'query': 'Кременчуцький міст перекрито пошкоджено'},
+    'KAM_HPP': {'name': "Середньодніпровська ГЕС (Кам'янське)", 'coords': [(34.5421, 48.5521), (34.5512, 48.5582)], 'normal_speed': 40, 'query': "Середньодніпровська ГЕС Кам'янське перекрито"},
+    'DNI_AMUR': {'name': 'Амурський міст (Дніпро)', 'coords': [(35.0251, 48.4851), (35.0298, 48.4891)], 'normal_speed': 40, 'query': 'Амурський міст Дніпро перекрито аварія'},
+    'DNI_CENTR': {'name': 'Центральний міст (Дніпро)', 'coords': [(35.0512, 48.4712), (35.0589, 48.4782)], 'normal_speed': 50, 'query': 'Центральний міст Дніпро перекрито'},
+    'DNI_SOUTH': {'name': 'Південний міст (Дніпро)', 'coords': [(35.1012, 48.4112), (35.1089, 48.4082)], 'normal_speed': 50, 'query': 'Південний міст Дніпро перекрито удар'},
+    'ZP_PREOBR': {'name': 'Мости Преображенського (Запоріжжя)', 'coords': [(35.0812, 47.8312), (35.0921, 47.8351)], 'normal_speed': 40, 'query': 'Мости Преображенського Запоріжжя перекрито удар пошкоджено'},
+    'ZP_NEW': {'name': 'Нові мостові переходи (Запоріжжя)', 'coords': [(35.0712, 47.8412), (35.0851, 47.8451)], 'normal_speed': 50, 'query': 'нові мости Запоріжжя перекрито рух удар'}
 }
 
 # =========================================================
-# АВТОМАТИЧНИЙ МОДУЛЬ (OSRM + ПОШУК ТРИГЕРІВ НОВИН)
+# ГЛИБОКИЙ АВТОМАТИЧНИЙ АНАЛІЗАТОР (OSRM + MULTI-SOURCE SEARCH)
 # =========================================================
 def fetch_bridge_speed(coords, normal_speed):
     try:
@@ -101,40 +102,59 @@ def fetch_bridge_speed(coords, normal_speed):
             distance_m = res['routes'][0]['distance']
             if duration_sec > 0:
                 base_speed = (distance_m / 1000) / (duration_sec / 3600)
-                fluctuation = random.uniform(0.92, 1.08)
-                speed_kmh = round(base_speed * fluctuation, 1)
-                return min(speed_kmh, normal_speed * 1.2)
+                return round(base_speed, 1)
     except Exception:
         pass
-    return round(normal_speed * random.uniform(0.9, 1.1), 1)
+    return normal_speed
 
-def check_live_news_alerts(query_str):
+def smart_autonomous_check(b_id, b_info, speed_threshold):
+    """
+    Повністю автономна перевірка: аналізує швидкість через OSRM 
+    ТА шукає критичні згадки у відкритих джерелах/новинах.
+    """
+    spd = fetch_bridge_speed(b_info['coords'], b_info['normal_speed'])
+    
+    # Пошуковий запит для виявлення екстрених зведень (удар, перекриття, пошкодження)
+    is_emergency_detected = False
+    emergency_reason = ""
+    
     try:
-        url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(query_str + ' новини сьогодні')}"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=5)
+        url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(b_info['query'] + ' сьогодні новини')}"
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        response = requests.get(url, headers=headers, timeout=4)
         if response.status_code == 200:
-            html_text = response.text.lower()
-            closure_triggers = ['перекрито', 'обмежено рух', 'рух перекрито', 'рух заборонено', 'аварійне перекриття', 'зруйновано міст']
-            for trigger in closure_triggers:
-                if trigger in html_text:
-                    return True, f"Тригер: '{trigger}'"
+            html_lower = response.text.lower()
+            critical_keywords = [
+                'перекрито', 'обмежено рух', 'рух перекрито', 'рух заборонено', 
+                'удар', 'влучання', 'пошкоджено міст', 'аварійне перекриття', 
+                'зруйновано', 'вибух', 'приліт'
+            ]
+            for kw in critical_keywords:
+                if kw in html_lower:
+                    is_emergency_detected = True
+                    emergency_reason = f"Сигнал тривоги в джерелах: '{kw}'"
+                    break
     except Exception:
         pass
-    return False, "Відкритий"
 
-def save_speeds_to_history(speeds_dict, forced_status_dict, status_desc_dict):
+    # Визначення фінального статусу
+    if is_emergency_detected:
+        return 0.0, f"🔴 ЗАКРИТО (Авто-моніторинг: {emergency_reason})"
+    elif spd <= speed_threshold:
+        return spd, f"🟡 ЗАКРИТО (Авто: критичне падіння швидкості до {spd} км/год)"
+    else:
+        return spd, "🟢 Відкритий"
+
+def save_speeds_to_history(data_payload):
     timestamp = get_kyiv_now_str()
     records = []
-    for b_id, spd in speeds_dict.items():
-        is_forced = forced_status_dict.get(b_id, False)
-        status_text = status_desc_dict.get(b_id, 'Відкритий')
+    for b_id, info in data_payload.items():
         records.append({
             'timestamp': timestamp,
             'bridge_id': b_id,
             'bridge_name': BRIDGES[b_id]['name'],
-            'speed': 0.0 if (is_forced or 'ЗАКРИТО' in status_text) else spd,
-            'status': status_text
+            'speed': info['speed'],
+            'status': info['status']
         })
     df_new = pd.DataFrame(records)
     if os.path.exists(HISTORY_FILE):
@@ -147,73 +167,47 @@ def save_speeds_to_history(speeds_dict, forced_status_dict, status_desc_dict):
         df_combined = df_new
     df_combined.to_csv(HISTORY_FILE, index=False)
 
-def load_latest_speeds():
+def load_or_run_initial_check(speed_threshold):
     if not os.path.exists(HISTORY_FILE):
-        speeds = {}
-        statuses = {}
-        forced = {}
+        payload = {}
         for b_id, b_info in BRIDGES.items():
-            spd = fetch_bridge_speed(b_info['coords'], b_info['normal_speed'])
-            speeds[b_id] = spd
-            forced[b_id] = False
-            is_closed, desc = check_live_news_alerts(b_info['search_query'])
-            if is_closed:
-                statuses[b_id] = f"🔴 ЗАКРИТО (Авто-новини: {desc})"
-            elif spd <= 7:
-                statuses[b_id] = "🟡 ЗАКРИТО (Авто: низька швидкість)"
-            else:
-                statuses[b_id] = "🟢 Відкритий"
-        save_speeds_to_history(speeds, forced, statuses)
-        return speeds, get_kyiv_now_str()
+            spd, status = smart_autonomous_check(b_id, b_info, speed_threshold)
+            payload[b_id] = {'speed': spd, 'status': status}
+        save_speeds_to_history(payload)
+        return payload, get_kyiv_now_str()
     
     try:
         df_hist = pd.read_csv(HISTORY_FILE)
         if df_hist.empty:
-            speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
-            return speeds, get_kyiv_now_str()
-
+            return {}, get_kyiv_now_str()
         latest_timestamp = df_hist['timestamp'].max()
         df_latest = df_hist[df_hist['timestamp'] == latest_timestamp]
-        speeds = dict(zip(df_latest['bridge_id'], df_latest['speed']))
-        
-        for b_id, b_info in BRIDGES.items():
-            if b_id not in speeds:
-                speeds[b_id] = b_info['normal_speed']
-                
-        return speeds, latest_timestamp
+        payload = {}
+        for _, row in df_latest.iterrows():
+            b_id = row['bridge_id']
+            if b_id in BRIDGES:
+                payload[b_id] = {'speed': row['speed'], 'status': row['status']}
+        return payload, latest_timestamp
     except Exception:
-        speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
-        return speeds, get_kyiv_now_str()
+        return {}, get_kyiv_now_str()
 
-# Фоновий автономний збір даних кожні 15 хвилин
+# Автоматичний фоновий потік оновлення даних кожні 10 хвилин
 @st.cache_resource
 def start_background_collector():
-    def background_collector():
+    def background_loop():
         while True:
             try:
-                speeds = {}
-                statuses = {}
-                forced = {}
+                payload = {}
                 for b_id, b_info in BRIDGES.items():
-                    spd = fetch_bridge_speed(b_info['coords'], b_info['normal_speed'])
-                    speeds[b_id] = spd
-                    forced[b_id] = False
-                    
-                    is_closed_news, news_desc = check_live_news_alerts(b_info['search_query'])
-                    if is_closed_news:
-                        statuses[b_id] = f"🔴 ЗАКРИТО (Авто-новини: {news_desc})"
-                    elif spd <= 7:
-                        statuses[b_id] = "🟡 ЗАКРИТО (Авто: низька швидкість)"
-                    else:
-                        statuses[b_id] = "🟢 Відкритий"
-                        
-                save_speeds_to_history(speeds, forced, statuses)
+                    spd, status = smart_autonomous_check(b_id, b_info, 7.0)
+                    payload[b_id] = {'speed': spd, 'status': status}
+                save_speeds_to_history(payload)
             except Exception:
                 pass
-            time.sleep(15 * 60)
+            time.sleep(10 * 60)
 
-    thread = threading.Thread(target=background_collector, daemon=True)
-    thread.start()
+    t = threading.Thread(target=background_loop, daemon=True)
+    t.start()
     return True
 
 start_background_collector()
@@ -222,8 +216,7 @@ start_background_collector()
 def load_excel_model(file_path):
     with open(file_path, "rb") as f:
         file_bytes = f.read()
-    df_options = pd.read_excel(io.BytesIO(file_bytes), sheet_name='06A_Варіанти')
-    return df_options
+    return pd.read_excel(io.BytesIO(file_bytes), sheet_name='06A_Варіанти')
 
 def recalculate_network(df_options, bridge_status_dict):
     bridge_cols = list(BRIDGES.keys()) + ['DIRECT']
@@ -262,88 +255,57 @@ def recalculate_network(df_options, bridge_status_dict):
     }
 
 # =========================================================
-# ІНТЕРФЕЙС КОРИСТУВАЧА
+# ІНТЕРФЕЙС
 # =========================================================
-st.title("🌁 Автоматичний моніторинг мостів та Логістична модель")
+st.title("🌁 Автономний моніторинг мостів та логістичних ризиків")
 
 try:
     df_options = load_excel_model(EXCEL_FILE)
 except Exception as e:
-    st.error(f"Помилка завантаження Excel-файлу '{EXCEL_FILE}': {e}")
+    st.error(f"Помилка завантаження файлу '{EXCEL_FILE}': {e}")
     st.stop()
 
 st.sidebar.header("⚙ Налаштування системи")
-speed_threshold = st.sidebar.slider("Поріг критичної швидкості (км/год):", min_value=3, max_value=12, value=7)
+speed_threshold = st.sidebar.slider("Поріг швидкості затору (км/год):", min_value=3, max_value=12, value=7)
 
-bridge_speeds, last_time = load_latest_speeds()
-st.sidebar.info(f"🕒 Актуальні дані від: **{last_time}**")
+current_payload, last_time = load_or_run_initial_check(speed_threshold)
+st.sidebar.info(f"🕒 Авто-синхронізація: **{last_time}**")
 
-if st.sidebar.button("🌐 Оновити дані (OSRM + Новини) наживо", use_container_width=True):
-    with st.spinner("Збираємо свіжі дані з карт та відкритих джерел..."):
-        new_speeds = {}
-        statuses = {}
-        forced = {}
+if st.sidebar.button("🔄 Оновити всі дані (Сканувати мережу та новини)", use_container_width=True):
+    with st.spinner("Пошук нових загроз та аналіз пропускної здатності мостів..."):
+        new_payload = {}
         for b_id, b_info in BRIDGES.items():
-            spd = fetch_bridge_speed(b_info['coords'], b_info['normal_speed'])
-            new_speeds[b_id] = spd
-            forced[b_id] = False
-            
-            is_closed_news, news_desc = check_live_news_alerts(b_info['search_query'])
-            if is_closed_news:
-                statuses[b_id] = f"🔴 ЗАКРИТО ({news_desc})"
-            elif spd <= speed_threshold:
-                statuses[b_id] = "🟡 ЗАКРИТО (Авто: низька швидкість)"
-            else:
-                statuses[b_id] = "🟢 Відкритий"
-                
-        save_speeds_to_history(new_speeds, forced, statuses)
-        st.success("✅ Дані успішно оновлено!")
+            spd, status = smart_autonomous_check(b_id, b_info, speed_threshold)
+            new_payload[b_id] = {'speed': spd, 'status': status}
+        save_speeds_to_history(new_payload)
+        st.success("✅ Дані оновлено успішно!")
         st.rerun()
 
 st.sidebar.divider()
-st.sidebar.subheader("🎛 Ручний контроль (резерв)")
-st.sidebar.caption("Примусове блокування мостів у разі потреби:")
-
+st.sidebar.subheader("🎛 Ручний запобіжник (резерв)")
 bridge_status = {}
-forced_status = {}
-status_descriptions = {}
-
 for b_id, b_info in BRIDGES.items():
-    spd = bridge_speeds.get(b_id, b_info['normal_speed'])
-    is_closed_news, news_desc = check_live_news_alerts(b_info['search_query'])
+    bridge_info = current_payload.get(b_id, {'speed': b_info['normal_speed'], 'status': '🟢 Відкритий'})
+    is_currently_closed = 'ЗАКРИТО' in bridge_info['status']
     
-    force_closed = st.sidebar.checkbox(f"⛔ Примусово закрити: {b_info['name']}", value=False, key=f"force_{b_id}")
-    forced_status[b_id] = force_closed
+    force_closed = st.sidebar.checkbox(f"⛔ Блокувати: {b_info['name']}", value=is_currently_closed, key=f"force_{b_id}")
     
     if force_closed:
         bridge_status[b_id] = False
-        status_descriptions[b_id] = "🔴 ЗАКРИТО (Ручне блокування)"
-    elif is_closed_news:
-        bridge_status[b_id] = False
-        status_descriptions[b_id] = f"🔴 ЗАКРИТО (Авто-новини)"
-    elif spd <= speed_threshold:
-        bridge_status[b_id] = False
-        status_descriptions[b_id] = "🟡 ЗАКРИТО (Авто: низька швидкість)"
     else:
-        bridge_status[b_id] = True
-        status_descriptions[b_id] = "🟢 Відкритий"
-
-if st.sidebar.button("💾 Зафіксувати зріз в історію", use_container_width=True):
-    save_speeds_to_history(bridge_speeds, forced_status, status_descriptions)
-    st.sidebar.success("✅ Збережено в історію!")
-    st.rerun()
+        bridge_status[b_id] = not is_currently_closed
 
 results = recalculate_network(df_options, bridge_status)
 
-# Вкладки додатку
+# Вкладки
 tab1, tab2, tab3 = st.tabs([
     "📊 Логістичний аналіз мережі", 
-    "🌁 Стан мостів", 
-    "📜 Історія та тренди"
+    "🌁 Стан мостів (Авто-моніторинг)", 
+    "📜 Історія звітів"
 ])
 
 with tab1:
-    st.subheader("📈 Вплив стану мостів на добовий пробіг транспортної мережі")
+    st.subheader("📈 Вплив закритих мостів на добовий пробіг мережі")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Базовий пробіг", f"{results['base_dist']:,.1f} км/день")
     c2.metric("Пробіг сценарію", f"{results['scenario_dist']:,.1f} км/день", delta=f"{results['diff_dist']:,.1f} км", delta_color="inverse")
@@ -353,64 +315,40 @@ with tab1:
     st.divider()
     closed_bridges = [BRIDGES[b]['name'] for b, is_open in bridge_status.items() if not is_open]
     if closed_bridges:
-        st.error(f"🚨 **УВАГА! Закриті мости в моделі:**\n* " + "\n* ".join(closed_bridges))
+        st.error(f"🚨 **УВАГА! У модель закладено перекриття:**\n* " + "\n* ".join(closed_bridges))
     else:
-        st.success("🟢 Усі 13 мостових переходів відкриті та функціонують.")
+        st.success("🟢 Усі мости функціонують.")
 
     st.subheader(f"🔄 Перепризначені маршрути ({results['changed_routes']})")
     df_changed = results['df_changed']
     if not df_changed.empty:
-        possible_cols = ['Код ТТ', 'Адреса ТТ', 'Населений пункт', 'Базовий маршрут (Назва)', 'Новий маршрут (Назва)', 'Базова відстань, км', 'Нова відстань, км', 'Різниця, км']
-        display_cols = [col for col in possible_cols if col in df_changed.columns] or list(df_changed.columns[:8])
+        cols = ['Код ТТ', 'Адреса ТТ', 'Населений пункт', 'Базовий маршрут (Назва)', 'Новий маршрут (Назва)', 'Базова відстань, км', 'Нова відстань, км', 'Різниця, км']
+        display_cols = [c for c in cols if c in df_changed.columns] or list(df_changed.columns[:8])
         st.dataframe(df_changed[display_cols].sort_values(by='Різниця, км', ascending=False), use_container_width=True, hide_index=True)
     else:
-        st.info("У поточному сценарії перепризначень маршрутів немає.")
+        st.info("Перепризначень немає.")
 
 with tab2:
-    st.subheader("📋 Поточний стан та статус переходів")
+    st.subheader("📋 Автоматичний статус переходів у реальному часі")
     table_data = []
     for b_id, b_info in BRIDGES.items():
-        spd = bridge_speeds.get(b_id, b_info['normal_speed'])
+        info = current_payload.get(b_id, {'speed': b_info['normal_speed'], 'status': '🟢 Відкритий'})
         table_data.append({
             'ID': b_id,
             'Міст / ГЕС': b_info['name'],
-            'Швидкість (км/год)': spd,
-            'Статус у системі': status_descriptions.get(b_id, 'Відкритий')
+            'Швидкість (км/год)': info['speed'],
+            'Статус системи': info['status']
         })
     st.dataframe(pd.DataFrame(table_data), use_container_width=True)
 
 with tab3:
-    st.subheader("📜 Історія вимірювань та статусів")
+    st.subheader("📜 Архів історії сканувань")
     if os.path.exists(HISTORY_FILE):
-        try:
-            df_hist = pd.read_csv(HISTORY_FILE).sort_values(by='timestamp', ascending=False)
-            if not df_hist.empty:
-                selected_bridge = st.selectbox("Оберіть міст для перегляду динаміки:", df_hist['bridge_name'].unique())
-                df_filtered = df_hist[df_hist['bridge_name'] == selected_bridge]
-                
-                fig_line = px.line(
-                    df_filtered, 
-                    x='timestamp', 
-                    y='speed', 
-                    title=f"Динаміка швидкості та закриттів: {selected_bridge}",
-                    labels={'timestamp': 'Час заміру', 'speed': 'Швидкість (км/год)'},
-                    markers=True
-                )
-                st.plotly_chart(fig_line, use_container_width=True)
-                
-                st.subheader("📊 Повна таблиця історії вимірювань")
-                st.dataframe(df_hist, use_container_width=True, hide_index=True)
-                
-                csv_hist = df_hist.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(
-                    label="📥 Завантажити повну історію (CSV)",
-                    data=csv_hist,
-                    file_name="bridge_speed_history.csv",
-                    mime="text/csv"
-                )
-            else:
-                st.info("Історія поки порожня.")
-        except Exception:
-            st.info("Помилка читання файлу історії.")
-    else:
-        st.info("Історія поки порожня.")
+        df_hist = pd.read_csv(HISTORY_FILE).sort_values(by='timestamp', ascending=False)
+        if not df_hist.empty:
+            sel_bridge = st.selectbox("Оберіть об'єкт для аналізу динаміки:", df_hist['bridge_name'].unique())
+            df_filtered = df_hist[df_hist['bridge_name'] == sel_bridge]
+            
+            fig = px.line(df_filtered, x='timestamp', y='speed', title=f"Динаміка: {sel_bridge}", markers=True)
+            st.plotly_chart(fig, use_container_width=True)
+            st.dataframe(df_hist, use_container_width=True, hide_index=True)
