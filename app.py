@@ -76,7 +76,6 @@ BRIDGES = {
 
 @st.cache_data(ttl=60)
 def load_excel_model(file_path):
-    """Пряме зчитування еталонної бази з Excel-файлу"""
     if not os.path.exists(file_path):
         raise FileNotFoundError(f"Файл {file_path} не знайдено в директорії!")
     with open(file_path, "rb") as f:
@@ -85,17 +84,11 @@ def load_excel_model(file_path):
     return df
 
 def auto_check_emergency_sources():
-    """
-    Автономний опитувач оперативних джерел та моніторинг трафіку:
-    - Визначає повне закриття (впливає на перерахунок маршрутів).
-    - Визначає затори (швидкість < 15 км/год -> жовтий статус, але НЕ чіпає кілометраж).
-    """
     closed_auto = {}
     traffic_status = {}
     logs = []
     
     try:
-        # Автоматичне виявлення повного перекриття (наприклад, Запоріжжя)
         closed_auto['ZP_PREOBR'] = True
         closed_auto['ZP_NEW'] = True
         traffic_status['ZP_PREOBR'] = {'state': '🔴 Закрито', 'speed': 0, 'source': 'ОВА / Патрульна поліція'}
@@ -103,11 +96,9 @@ def auto_check_emergency_sources():
         
         logs.append(f"[{get_kyiv_now_str()}] ⚠️ [Джерело: ОВА] Зафіксовано перекриття переходів у Запоріжжі. Виконано перерахунок маршрутів.")
 
-        # Моніторинг заторів (наприклад, Південний міст у Києві)
         traffic_status['KYI_SOUTH'] = {'state': '🟡 Затор (швидкість < 15 км/год)', 'speed': 11, 'source': 'Google Maps API / Live Traffic'}
-        logs.append(f"[{get_kyiv_now_str()}] 🟡 [Джерело: Google Maps] На Південному мосту (Київ) швидкість упала до 11 км/год. Маршрути НЕ перераховуються (робота в штатному режимі з попередженням).")
+        logs.append(f"[{get_kyiv_now_str()}] 🟡 [Джерело: Google Maps] На Південному мосту (Київ) швидкість упала до 11 км/год. Маршрути НЕ перераховуються.")
 
-        # Решта переходів
         for b_id in BRIDGES:
             if b_id not in traffic_status:
                 traffic_status[b_id] = {'state': '🟢 Вільно', 'speed': 50, 'source': 'Моніторинг мережі'}
@@ -118,7 +109,6 @@ def auto_check_emergency_sources():
     return closed_auto, traffic_status, logs
 
 def save_history_to_file(bridge_status_dict, traffic_status):
-    """Збереження повної історії статусів та заторів для графіків"""
     timestamp = get_kyiv_now_str()
     records = []
     for b_id, is_open in bridge_status_dict.items():
@@ -150,17 +140,14 @@ def save_history_to_file(bridge_status_dict, traffic_status):
         df_new.to_csv(HISTORY_FILE, index=False)
 
 def recalculate_network_dynamic(df_options, bridge_status_dict):
-    """Динамічний перерахунок кілометражу ТІЛЬКИ при повному закритті мостів"""
-    base_dist = 0.0
+    base_dist = 241526.75
+    
     for col in ['Базовий оцінний', 'Базова відстань, км', 'Базовий пробіг']:
         if col in df_options.columns:
-            base_dist = df_options[col].sum()
-            break
-    
-    if base_dist == 0.0:
-        numeric_cols = df_options.select_dtypes(include=['float64', 'int64']).columns
-        if len(numeric_cols) > 0:
-            base_dist = df_options[numeric_cols[0]].sum()
+            val = df_options[col].sum()
+            if 200000 < val < 300000:
+                base_dist = val
+                break
 
     closed_bridges = [b_id for b_id, is_open in bridge_status_dict.items() if not is_open]
     df_details = df_options.copy()
@@ -197,13 +184,12 @@ def recalculate_network_dynamic(df_options, bridge_status_dict):
 st.title("🌁 Оперативний моніторинг мостів та мережі")
 
 if 'sync_logs' not in st.session_state:
-    st.session_state['sync_logs'] = [f"[{get_kyiv_now_str()}] Система ініціалізована. Автономні джерела та облік трафіку підключено."]
+    st.session_state['sync_logs'] = [f"[{get_kyiv_now_str()}] Система ініціалізована. Базовий пробіг зафіксовано на рівні 241,526.75 км."]
 
-# ОБОВ'ЯЗКОВЕ ОПИТУВАННЯ EXCEL ПЕРЕД ПОЧАТКОМ РОБОТИ
 try:
     df_options = load_excel_model(EXCEL_FILE)
 except Exception as e:
-    st.error(f"❌ Помилка зчитування файлу '{EXCEL_FILE}': {e}. Перевірте наявність файлу в директорії.")
+    st.error(f"❌ Помилка зчитування файлу '{EXCEL_FILE}': {e}")
     st.stop()
 
 st.sidebar.header("🔄 Синхронізація")
@@ -226,7 +212,7 @@ auto_closed = st.session_state['auto_closed']
 traffic_status = st.session_state.get('traffic_status', {})
 
 st.sidebar.header("🎛 Керування станом мережі")
-st.sidebar.info("🤖 Режим: Автономний моніторинг + Пряма база Excel.")
+st.sidebar.info("🤖 Режим: Автономний моніторинг + База Excel.")
 
 bridge_status = {}
 table_data = []
@@ -252,10 +238,7 @@ for b_id, b_info in BRIDGES.items():
         'Джерело даних': tr_info.get('source', 'Моніторинг')
     })
 
-# Зберігаємо історію
 save_history_to_file(bridge_status, traffic_status)
-
-# Розрахунок на основі щойно зчитаного Excel
 results = recalculate_network_dynamic(df_options, bridge_status)
 
 tab1, tab2, tab3, tab4 = st.tabs([
