@@ -30,7 +30,7 @@ def get_kyiv_now_str():
     return datetime.now(KYIV_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 # =========================================================
-# БЛОК АВТОРИЗАЦІЇ (ГАРАНТОВАНО ПРАЦЮЄ ENTER)
+# БЛОК АВТОРИЗАЦІЇ
 # =========================================================
 def check_password():
     try:
@@ -76,7 +76,7 @@ with st.sidebar:
         st.rerun()
 
 # =========================================================
-# ОСНОВНІ НАЛАШТУВАННЯ ТА СТРУКТУРА 13 МОСТІВ
+# СТРУКТУРА 13 МОСТІВ
 # =========================================================
 EXCEL_FILE = 'Робоча_модель_мережі_ФІНАЛ 1.xlsx'
 HISTORY_FILE = 'bridge_history.csv'
@@ -98,7 +98,7 @@ BRIDGES = {
 }
 
 # =========================================================
-# ФУНКЦІЇ РОБОТИ З ІСТОРІЄЮ ТА OSRM
+# ФУНКЦІЇ РОБОТИ З OSRM ТА ІСТОРІЄЮ
 # =========================================================
 def fetch_bridge_speed(coords, normal_speed):
     try:
@@ -118,15 +118,17 @@ def fetch_bridge_speed(coords, normal_speed):
         pass
     return round(normal_speed * random.uniform(0.9, 1.1), 1)
 
-def save_speeds_to_history(speeds_dict):
+def save_speeds_to_history(speeds_dict, forced_status_dict):
     timestamp = get_kyiv_now_str()
     records = []
     for b_id, spd in speeds_dict.items():
+        is_forced_closed = forced_status_dict.get(b_id, False)
         records.append({
             'timestamp': timestamp,
             'bridge_id': b_id,
             'bridge_name': BRIDGES[b_id]['name'],
-            'speed': spd
+            'speed': 0.0 if is_forced_closed else spd,
+            'status': 'ЗАКРИТО (Ручне/Новини)' if is_forced_closed else ('Затор' if spd <= 7 else 'Відкритий')
         })
     df_new = pd.DataFrame(records)
     if os.path.exists(HISTORY_FILE):
@@ -142,14 +144,16 @@ def save_speeds_to_history(speeds_dict):
 def load_latest_speeds():
     if not os.path.exists(HISTORY_FILE):
         speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
-        save_speeds_to_history(speeds)
+        default_forced = {b_id: False for b_id in BRIDGES}
+        save_speeds_to_history(speeds, default_forced)
         return speeds, get_kyiv_now_str()
     
     try:
         df_hist = pd.read_csv(HISTORY_FILE)
         if df_hist.empty:
             speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
-            save_speeds_to_history(speeds)
+            default_forced = {b_id: False for b_id in BRIDGES}
+            save_speeds_to_history(speeds, default_forced)
             return speeds, get_kyiv_now_str()
 
         latest_timestamp = df_hist['timestamp'].max()
@@ -171,7 +175,9 @@ def start_background_collector():
         while True:
             try:
                 speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
-                save_speeds_to_history(speeds)
+                # Фоновий збір пише стандартні статуси без ручних галочок
+                default_forced = {b_id: False for b_id in BRIDGES}
+                save_speeds_to_history(speeds, default_forced)
             except Exception:
                 pass
             time.sleep(20 * 60)
@@ -226,7 +232,7 @@ def recalculate_network(df_options, bridge_status_dict):
     }
 
 # =========================================================
-# ГОЛОВНИЙ ІНТЕРФЕЙС
+# ІНТЕРФЕЙС
 # =========================================================
 st.title("🌁 Моніторинг 13 мостів/ГЕС та Розрахунок Ризиків Мережі")
 
@@ -237,35 +243,42 @@ except Exception as e:
     st.stop()
 
 st.sidebar.header("⚙ Налаштування системи")
-mode = st.sidebar.radio("Режим роботи:", ["🤖 Автоматичний (OSRM)", "🎛 Ручний конструктор"])
 speed_threshold = st.sidebar.slider("Поріг закритого мосту (км/год):", min_value=3, max_value=12, value=7)
 
+bridge_speeds, last_time = load_latest_speeds()
+st.sidebar.info(f"🕒 Дані від: **{last_time}**")
+
+st.sidebar.divider()
+st.sidebar.subheader("🚨 Ручне блокування (Новини / Перекриття)")
+st.sidebar.caption("Позначте закриті мости. Статус та час одразу запишуться в історію:")
+
 bridge_status = {}
-bridge_speeds = {}
+forced_status = {}
 
-if mode == "🤖 Автоматичний (OSRM)":
-    bridge_speeds, last_time = load_latest_speeds()
-    st.sidebar.info(f"🕒 Останні дані від: **{last_time}**\n*(Фоновий запит що-20 хв)*")
+for b_id, b_info in BRIDGES.items():
+    auto_is_open = bridge_speeds.get(b_id, b_info['normal_speed']) > speed_threshold
     
-    if st.sidebar.button("🔄 Оновити дані з OSRM зараз", use_container_width=True):
-        with st.spinner("Опитування OSRM API та збереження..."):
-            new_speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
-            save_speeds_to_history(new_speeds)
-            st.rerun()
+    # Чекбокс ручного блокування
+    force_closed = st.sidebar.checkbox(f"⛔ Закрито: {b_info['name']}", value=False, key=f"force_{b_id}")
+    forced_status[b_id] = force_closed
+    
+    bridge_status[b_id] = False if force_closed else auto_is_open
 
-    for b_id, spd in bridge_speeds.items():
-        bridge_status[b_id] = spd > speed_threshold
+# Кнопка збереження поточного стану з урахуванням ручних перекриттів в історію
+if st.sidebar.button("💾 Зафіксувати поточний статус в історію", use_container_width=True):
+    save_speeds_to_history(bridge_speeds, forced_status)
+    st.sidebar.success("✅ Збережено в історію!")
+    st.rerun()
 
-else:
-    st.sidebar.subheader("Стан мостів (Ручне перемикання)")
-    for b_id, b_info in BRIDGES.items():
-        is_open = st.sidebar.checkbox(f"{b_info['name']}", value=True)
-        bridge_status[b_id] = is_open
-        bridge_speeds[b_id] = b_info['normal_speed'] if is_open else 0
+if st.sidebar.button("🔄 Оновити дані OSRM зараз", use_container_width=True):
+    with st.spinner("Опитування OSRM API..."):
+        new_speeds = {b_id: fetch_bridge_speed(b_info['coords'], b_info['normal_speed']) for b_id, b_info in BRIDGES.items()}
+        save_speeds_to_history(new_speeds, forced_status)
+        st.rerun()
 
 results = recalculate_network(df_options, bridge_status)
 
-# Робимо рівно 3 вкладки замість 4
+# Вкладки додатку
 tab1, tab2, tab3 = st.tabs([
     "📊 Логістичний аналіз мережі", 
     "🌁 Стан мостів", 
@@ -278,14 +291,14 @@ with tab1:
     c1.metric("Базовий пробіг", f"{results['base_dist']:,.1f} км/день")
     c2.metric("Пробіг сценарію", f"{results['scenario_dist']:,.1f} км/день", delta=f"{results['diff_dist']:,.1f} км", delta_color="inverse")
     c3.metric("Приріст пробігу", f"{results['diff_pct']}%", delta=f"{results['diff_pct']}%", delta_color="inverse")
-    c4.metric("Перепризначено ТТ/маршрутів", f"{results['changed_routes']}")
+    c4.metric("Перепризначено маршрутів", f"{results['changed_routes']}")
     
     st.divider()
     closed_bridges = [BRIDGES[b]['name'] for b, is_open in bridge_status.items() if not is_open]
     if closed_bridges:
-        st.error(f"🚨 **УВАГА! Закриті/перекриті мости ({len(closed_bridges)}):**\n* " + "\n* ".join(closed_bridges))
+        st.error(f"🚨 **УВАГА! Закриті мости:**\n* " + "\n* ".join(closed_bridges))
     else:
-        st.success("🟢 Усі 13 мостових переходів відкриті та функціонують у нормальному режимі.")
+        st.success("🟢 Усі 13 мостових переходів відкриті.")
 
     st.subheader(f"🔄 Перепризначені маршрути ({results['changed_routes']})")
     df_changed = results['df_changed']
@@ -294,26 +307,32 @@ with tab1:
         display_cols = [col for col in possible_cols if col in df_changed.columns] or list(df_changed.columns[:8])
         st.dataframe(df_changed[display_cols].sort_values(by='Різниця, км', ascending=False), use_container_width=True, hide_index=True)
     else:
-        st.info("Немає змінених маршрутів у даному сценарії.")
+        st.info("У поточному сценарії перепризначень маршрутів немає.")
 
 with tab2:
-    st.subheader("📋 Поточна швидкість та статус переходів")
+    st.subheader("📋 Поточний стан та статус переходів")
     table_data = []
     for b_id, b_info in BRIDGES.items():
         spd = bridge_speeds.get(b_id, b_info['normal_speed'])
         is_open = bridge_status.get(b_id, True)
-        status_str = "🟢 Відкритий" if spd > 15 else ("🟡 Затор (рух є)" if is_open else "🔴 ЗАКРИТО / ГЛУХИЙ ЗАТОР")
+        
+        if not is_open:
+            status_str = "🔴 ЗАКРИТО (Ручне блокування / Новини)"
+        elif spd <= speed_threshold:
+            status_str = "🟡 Затор (низька швидкість)"
+        else:
+            status_str = "🟢 Відкритий"
+            
         table_data.append({
             'ID': b_id,
             'Міст / ГЕС': b_info['name'],
             'Швидкість (км/год)': spd,
-            'Поріг закриття': f"≤ {speed_threshold} км/год",
-            'Статус': status_str
+            'Статус у системі': status_str
         })
     st.dataframe(pd.DataFrame(table_data), use_container_width=True)
 
 with tab3:
-    st.subheader("📜 Історія вимірювань швидкості")
+    st.subheader("📜 Історія вимірювань та статусів")
     if os.path.exists(HISTORY_FILE):
         try:
             df_hist = pd.read_csv(HISTORY_FILE).sort_values(by='timestamp', ascending=False)
@@ -325,18 +344,18 @@ with tab3:
                     df_filtered, 
                     x='timestamp', 
                     y='speed', 
-                    title=f"Динаміка швидкості: {selected_bridge}",
-                    labels={'timestamp': 'Час заміру', 'speed': 'Швидкість (км/год)'},
+                    title=f"Динаміка швидкості та закриттів: {selected_bridge}",
+                    labels={'timestamp': 'Час заміру', 'speed': 'Швидкість (км/год) / 0 при закритті'},
                     markers=True
                 )
                 st.plotly_chart(fig_line, use_container_width=True)
                 
-                st.subheader("📊 Повна таблиця зафіксованих замірів")
+                st.subheader("📊 Повна таблиця історії (включно з ручними закриттями)")
                 st.dataframe(df_hist, use_container_width=True, hide_index=True)
                 
                 csv_hist = df_hist.to_csv(index=False).encode('utf-8-sig')
                 st.download_button(
-                    label="📥 Завантажити повну історію замірів (CSV)",
+                    label="📥 Завантажити повну історію (CSV)",
                     data=csv_hist,
                     file_name="bridge_speed_history.csv",
                     mime="text/csv"
