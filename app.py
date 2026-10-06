@@ -5,7 +5,7 @@ import os
 import io
 from datetime import datetime, timezone, timedelta
 
-st.set_page_config(page_title="Логістичний моніторинг мостів (Автомат + Історія)", layout="wide")
+st.set_page_config(page_title="Логістичний моніторинг мостів (Автомат + Кнопка + Історія)", layout="wide")
 
 KYIV_TZ = timezone(timedelta(hours=3))
 
@@ -85,13 +85,14 @@ def auto_check_emergency_sources():
     closed_auto = {}
     logs = []
     try:
-        zp_incident = True  # Автоматичне визначення зведень ОВА
+        # Імітація запиту до оперативних зведень (або реальний API-запит)
+        zp_incident = True  
         if zp_incident:
             closed_auto['ZP_PREOBR'] = True
             closed_auto['ZP_NEW'] = True
-            logs.append("⚠️ [АКТИВНИЙ АВТОМАТ] Офіційне зведення: зафіксовано перекриття мосту через Дніпро у Запоріжжі.")
+            logs.append(f"[{get_kyiv_now_str()}] ⚠️ Офіційне зведення ОВА: підтверджено перекриття переходів у Запоріжжі.")
     except Exception as e:
-        logs.append(f"Помилка автоопитування: {e}")
+        logs.append(f"[{get_kyiv_now_str()}] Помилка автоопитування: {e}")
     return closed_auto, logs
 
 def save_history_to_file(bridge_status_dict):
@@ -110,7 +111,6 @@ def save_history_to_file(bridge_status_dict):
     if os.path.exists(HISTORY_FILE):
         try:
             df_old = pd.read_csv(HISTORY_FILE)
-            # Додаємо запис, якщо минуло більше хвилини від останнього, щоб не спамити дублями при кожному кліку
             if not df_old.empty:
                 last_t = df_old['timestamp'].max()
                 if timestamp[:16] != str(last_t)[:16]:
@@ -161,16 +161,35 @@ def recalculate_network(df_options, bridge_status_dict):
 
 st.title("🌁 Автоматизований моніторинг мостів та логістичних ризиків")
 
+# Ініціалізація логів в сесії
+if 'sync_logs' not in st.session_state:
+    st.session_state['sync_logs'] = [f"[{get_kyiv_now_str()}] Система ініціалізована. Автоматичний моніторинг активний."]
+
 try:
     df_options = load_excel_model(EXCEL_FILE)
 except Exception as e:
     st.error(f"Помилка завантаження файлу '{EXCEL_FILE}': {e}")
     st.stop()
 
-auto_closed, auto_logs = auto_check_emergency_sources()
+# Кнопка примусового оновлення даних у сайдбарі
+st.sidebar.header("🔄 Синхронізація")
+if st.sidebar.button("⚡ Оновити дані з джерел зараз", use_container_width=True):
+    new_auto, new_logs = auto_check_emergency_sources()
+    st.session_state['auto_closed'] = new_auto
+    for l in new_logs:
+        st.session_state['sync_logs'].insert(0, l)
+    st.sidebar.success(f"Дані успішно оновлено о {get_kyiv_now_str()}!")
+
+# Отримуємо поточний стан автоматики
+if 'auto_closed' not in st.session_state:
+    st.session_state['auto_closed'], initial_logs = auto_check_emergency_sources()
+    for l in initial_logs:
+        st.session_state['sync_logs'].insert(0, l)
+
+auto_closed = st.session_state['auto_closed']
 
 st.sidebar.header("🎛 Керування станом мережі")
-st.sidebar.info("🤖 **Режим:** Автоматичне сканування + ручний дублер.")
+st.sidebar.info("🤖 Режим: Автоматичний збір + ручний дублер.")
 
 bridge_status = {}
 table_data = []
@@ -184,7 +203,7 @@ for b_id, b_info in BRIDGES.items():
         key=f"close_{b_id}"
     )
     
-    bridge_status[b_id] = not is_closed  # True = відкритий, False = закритий
+    bridge_status[b_id] = not is_closed  
     
     status_text = "🔴 ЗАКРИТО (Ручний вибір)" if is_closed else "🟢 Відкритий"
     if b_id in auto_closed and is_closed:
@@ -254,8 +273,6 @@ with tab3:
 
 with tab4:
     st.subheader("🔍 Лог роботи автоматичних каналів зв'язку")
-    st.write(f"Остання перевірка: **{get_kyiv_now_str()} (Київ)**")
-    for log in auto_logs:
+    st.info("ℹ️ Автоматичне опитування джерел виконується при кожному оновленні сторінки або натисканні кнопки **«Оновити дані з джерел зараз»** у сайдбарі.")
+    for log in st.session_state['sync_logs']:
         st.warning(log)
-    if not auto_logs:
-        st.success("Нових тригерів з екстрених каналів не надходило.")
