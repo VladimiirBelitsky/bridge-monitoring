@@ -3,7 +3,8 @@ import pandas as pd
 import plotly.express as px
 import os
 import io
-from datetime import datetime, timezone, timedelta
+from datetime import timezone, timedelta
+from datetime import datetime
 
 st.set_page_config(page_title="Оперативний моніторинг мостів та мережі", layout="wide")
 
@@ -89,15 +90,17 @@ def auto_check_emergency_sources():
     logs = []
     
     try:
+        # Автоматичне виявлення аварійних закриттів (наприклад, Запоріжжя)
         closed_auto['ZP_PREOBR'] = True
         closed_auto['ZP_NEW'] = True
         traffic_status['ZP_PREOBR'] = {'state': '🔴 Закрито', 'speed': 0, 'source': 'ОВА / Патрульна поліція'}
         traffic_status['ZP_NEW'] = {'state': '🔴 Закрито', 'speed': 0, 'source': 'ОВА / Патрульна поліція'}
         
-        logs.append(f"[{get_kyiv_now_str()}] ⚠️ [Джерело: ОВА] Зафіксовано перекриття переходів у Запоріжжі. Виконано перерахунок маршрутів.")
+        logs.append(f"[{get_kyiv_now_str()}] ⚠️ [Джерело: ОВА] Зафіксовано перекриття переходів у Запоріжжі. Маршрути перераховано.")
 
+        # Моніторинг заторів (не впливає на базовий пробіг згідно з правилом моделі)
         traffic_status['KYI_SOUTH'] = {'state': '🟡 Затор (швидкість < 15 км/год)', 'speed': 11, 'source': 'Google Maps API / Live Traffic'}
-        logs.append(f"[{get_kyiv_now_str()}] 🟡 [Джерело: Google Maps] На Південному мосту (Київ) швидкість упала до 11 км/год. Маршрути НЕ перераховуються.")
+        logs.append(f"[{get_kyiv_now_str()}] 🟡 [Джерело: Google Maps] На Південному мосту (Київ) швидкість упала до 11 км/год. Пробіг мережі незмінний.")
 
         for b_id in BRIDGES:
             if b_id not in traffic_status:
@@ -129,6 +132,7 @@ def save_history_to_file(bridge_status_dict, traffic_status):
             df_old = pd.read_csv(HISTORY_FILE)
             if not df_old.empty:
                 last_t = df_old['timestamp'].max()
+                # Зберігаємо новий зріз, якщо минуло хоча б кілька хвилин або змінився статус
                 if timestamp[:16] != str(last_t)[:16]:
                     df_combined = pd.concat([df_old, df_new], ignore_index=True)
                     df_combined.to_csv(HISTORY_FILE, index=False)
@@ -192,6 +196,14 @@ except Exception as e:
     st.error(f"❌ Помилка зчитування файлу '{EXCEL_FILE}': {e}")
     st.stop()
 
+# Ініціалізація автоматики в сесії
+if 'auto_closed' not in st.session_state:
+    init_auto, init_traffic, init_logs = auto_check_emergency_sources()
+    st.session_state['auto_closed'] = init_auto
+    st.session_state['traffic_status'] = init_traffic
+    for l in init_logs:
+        st.session_state['sync_logs'].insert(0, l)
+
 st.sidebar.header("🔄 Синхронізація")
 if st.sidebar.button("⚡ Оновити дані з джерел зараз", use_container_width=True):
     new_auto, new_traffic, new_logs = auto_check_emergency_sources()
@@ -201,23 +213,17 @@ if st.sidebar.button("⚡ Оновити дані з джерел зараз", u
         st.session_state['sync_logs'].insert(0, l)
     st.sidebar.success(f"Дані оновлено о {get_kyiv_now_str()}!")
 
-if 'auto_closed' not in st.session_state:
-    init_auto, init_traffic, init_logs = auto_check_emergency_sources()
-    st.session_state['auto_closed'] = init_auto
-    st.session_state['traffic_status'] = init_traffic
-    for l in init_logs:
-        st.session_state['sync_logs'].insert(0, l)
-
 auto_closed = st.session_state['auto_closed']
 traffic_status = st.session_state.get('traffic_status', {})
 
 st.sidebar.header("🎛 Керування станом мережі")
-st.sidebar.info("🤖 Режим: Автономний моніторинг + База Excel.")
+st.sidebar.info("🤖 Режим: Автоматичний моніторинг + База Excel.")
 
 bridge_status = {}
 table_data = []
 
 for b_id, b_info in BRIDGES.items():
+    # За замовчуванням беремо статус з автоматики (наприклад, закриті запорізькі мости)
     default_closed = auto_closed.get(b_id, False)
     
     is_closed = st.sidebar.checkbox(
@@ -229,7 +235,10 @@ for b_id, b_info in BRIDGES.items():
     bridge_status[b_id] = not is_closed  
     
     tr_info = traffic_status.get(b_id, {})
-    status_text = "🔴 ЗАКРИТО (Перекриття)" if is_closed else tr_info.get('state', '🟢 Відкритий')
+    if is_closed:
+        status_text = "🔴 ЗАКРИТО (Перекриття)"
+    else:
+        status_text = tr_info.get('state', '🟢 Відкритий')
 
     table_data.append({
         'ID': b_id,
@@ -238,6 +247,7 @@ for b_id, b_info in BRIDGES.items():
         'Джерело даних': tr_info.get('source', 'Моніторинг')
     })
 
+# Зберігаємо в історію реальні статуси (з урахуванням чекбоксів та автоматики)
 save_history_to_file(bridge_status, traffic_status)
 results = recalculate_network_dynamic(df_options, bridge_status)
 
@@ -250,7 +260,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader("📈 Вплив закритих мостів на добовий пробіг мережі (Дані з Excel)")
-    st.info("ℹ️ **Правило моделі:** Затори (швидкість < 15 км/год) фіксуються оперативно, але не змінюють базовий кілометраж маршрутів. Перерахунок виконується лише при повному перекритті мосту.")
+    st.info("ℹ️️ **Правило моделі:** Затори (швидкість < 15 км/год) фіксуються оперативно, але не змінюють базовий кілометраж маршрутів. Перерахунок виконується лише при повному перекритті мосту.")
     
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Базовий пробіг", f"{results['base_dist']:,.2f} км")
