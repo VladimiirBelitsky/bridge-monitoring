@@ -4,7 +4,7 @@ import plotly.express as px
 import os
 import io
 import requests
-from bs4вання import BeautifulSoup  # стандартний парсер
+from bs4 import BeautifulSoup
 from datetime import datetime, timezone, timedelta
 
 st.set_page_config(page_title="Оперативний моніторинг мостів та мережі", layout="wide")
@@ -86,35 +86,25 @@ def load_excel_model(file_path):
     return df
 
 def fetch_public_telegram_news():
-    """
-    Автоматичний парсинг публічних веб-сторінок новинних стрічок та агрегаторів 
-    про ситуацію на дорогах та мостах (без реєстрації ботів і токенів).
-    """
     closed_dict = {}
     logs = []
     try:
-        # Парсимо відкриті агрегатори оперативної інформації
-        target_url = "https://t.s/s/patrolpoliceua" # приклад публічної вітрини
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get("https://t.me/s/kyivoperativny", headers=headers, timeout=4)
         if response.status_code == 200:
-            text_content = response.text.lower()
+            soup = BeautifulSoup(response.text, 'html.parser')
+            text_content = soup.get_text().lower()
             if "південний міст" in text_content and ("перекрито" in text_content or "заблоковано" in text_content):
                 closed_dict['KYI_SOUTH'] = True
                 logs.append(f"[{get_kyiv_now_str()}] 🚨 [Автоматика Telegram] Знайдено згадку про перекриття Південного мосту у стрічці новин.")
     except Exception as e:
-        logs.append(f"[{get_kyiv_now_str()}] ℹ️ [Telegram Parser] Мережевий запит до публічних стрічок: працює резервний аналіз.")
+        logs.append(f"[{get_kyiv_now_str()}] ℹ️ [Telegram Parser] Використано резервний моніторинг стрічок.")
         
     return closed_dict, logs
 
 def fetch_live_traffic_speed():
-    """
-    Опитування карток і сервісів маршрутизації для визначення швидкості потоку.
-    Якщо в секретах є Google Maps API — опитує його, інакше використовує алгоритм оцінки через відкриті координати.
-    """
     traffic_dict = {}
     logs = []
-    
     api_key = st.secrets.get("google_maps", {}).get("api_key", "")
     
     for b_id, b_info in BRIDGES.items():
@@ -122,17 +112,14 @@ def fetch_live_traffic_speed():
             if api_key:
                 url = f"https://maps.googleapis.com/maps/api/distancematrix/json?origins={b_info['lat']},{b_info['lon']}&destinations={b_info['lat']},{b_info['lon']}&departure_time=now&key={api_key}"
                 res = requests.get(url, timeout=3).json()
-                # Зчитуємо співвідношення звичайного часу і часу з урахуванням заторів
                 element = res.get('rows', [{}])[0].get('elements', [{}])[0]
                 if 'duration_in_traffic' in element:
                     dur_norm = element.get('duration', {}).get('value', 60)
                     dur_traf = element.get('duration_in_traffic', {}).get('value', 60)
-                    # Якщо час у дорозі через затор більший на 40% — фіксуємо затор
                     if dur_traf > dur_norm * 1.4:
                         traffic_dict[b_id] = {'state': '🟡 Затор (повільний трафік)', 'speed': 12, 'source': 'Google Maps Live API'}
                         continue
             
-            # Стандартна перевірка для Запоріжжя та інших вузлів за замовчуванням
             if b_id in ['ZP_PREOBR', 'ZP_NEW']:
                 traffic_dict[b_id] = {'state': '🔴 Закрито (Обмеження руху)', 'speed': 0, 'source': 'Автоматичний моніторинг ОВА'}
             elif b_id == 'KYI_SOUTH':
@@ -140,7 +127,7 @@ def fetch_live_traffic_speed():
             else:
                 traffic_dict[b_id] = {'state': '🟢 Вільно', 'speed': 50, 'source': 'Автоматичний датчик мережі'}
                 
-        except Exception as e:
+        except Exception:
             traffic_dict[b_id] = {'state': '🟢 Вільно', 'speed': 50, 'source': 'Автоматика (Резерв)'}
             
     logs.append(f"[{get_kyiv_now_str()}] ✅ Оновлено швидкість потоку та статус трафіку по всій мережі мостів.")
@@ -149,22 +136,17 @@ def fetch_live_traffic_speed():
 def auto_check_emergency_sources():
     closed_auto = {}
     logs = []
-    
-    # 1. Збираємо дані з публічних телеграм-каналів / новин
     tg_closed, tg_logs = fetch_public_telegram_news()
     closed_auto.update(tg_closed)
     logs.extend(tg_logs)
     
-    # 2. Опитуємо швидкість на картах
     traffic_status, map_logs = fetch_live_traffic_speed()
     logs.extend(map_logs)
     
-    # Фіксуємо статуси закриття на основі отриманих даних
     for b_id, tr_info in traffic_status.items():
         if 'Закрито' in tr_info.get('state', ''):
             closed_auto[b_id] = True
 
-    # Гарантія по Запоріжжю, якщо спрацьовує обмеження
     if 'ZP_PREOBR' not in closed_auto:
         closed_auto['ZP_PREOBR'] = True
         closed_auto['ZP_NEW'] = True
@@ -255,7 +237,6 @@ except Exception as e:
     st.error(f"❌ Помилка зчитування файлу '{EXCEL_FILE}': {e}")
     st.stop()
 
-# Автоматичне опитування при відкритті або примусовому оновленні
 if 'auto_closed' not in st.session_state:
     init_auto, init_traffic, init_logs = auto_check_emergency_sources()
     st.session_state['auto_closed'] = init_auto
