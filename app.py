@@ -2,7 +2,6 @@ import streamlit as st
 import requests
 from datetime import datetime, timezone, timedelta
 import pandas as pd
-import random
 import os
 import time
 from streamlit_autorefresh import st_autorefresh
@@ -40,7 +39,7 @@ BRIDGES = {
 }
 
 def get_kyiv_now():
-    return datetime.now(KYIV_TZ)
+    return datetime.now(timezone.utc) + timedelta(hours=3)
 
 def get_active_api_key(manual_input=""):
     if manual_input and manual_input.strip():
@@ -77,61 +76,72 @@ def load_history_csv():
             pass
     return pd.DataFrame(columns=['timestamp', 'id', 'name', 'region', 'state', 'speed', 'source_name', 'source_url'])
 
-def fetch_hybrid_telemetry(api_key):
+def fetch_strict_live_telemetry(api_key):
     now = get_kyiv_now()
     timestamp_str = now.strftime('%Y-%m-%d %H:%M:%S')
     traffic_dict = {}
     
+    if not api_key:
+        # Якщо ключ взагалі не заданий, повертаємо статус попередження для всіх
+        for b_id, b_info in BRIDGES.items():
+            traffic_dict[b_id] = {
+                'timestamp': timestamp_str,
+                'id': b_id,
+                'name': b_info['name'],
+                'region': b_info['region'],
+                'state': '⚠️ Потрібен дійсний API ключ',
+                'speed': 'Н/Д',
+                'source_name': b_info['source_name'],
+                'source_url': b_info['source_url']
+            }
+        return traffic_dict
+
     headers = {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': api_key,
-        'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters'
+        'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.travelAdvisory'
     }
 
     batch_records = []
-    api_success_count = 0
 
     for b_id, b_info in BRIDGES.items():
-        speed_kmh = None
+        speed_str = "Н/Д"
+        status_str = "❌ Немає зв'язку з API"
         
-        if api_key:
-            try:
-                url = "https://routes.googleapis.com/directions/v2:computeRoutes"
-                payload = {
-                    "origin": {"location": {"latLng": {"latitude": b_info['start_lat'], "longitude": b_info['start_lon']}}},
-                    "destination": {"location": {"latLng": {"latitude": b_info['end_lat'], "longitude": b_info['end_lon']}}},
-                    "travelMode": "DRIVE",
-                    "routingPreference": "TRAFFIC_AWARE"
-                }
-                res = requests.post(url, json=payload, headers=headers, timeout=5).json()
+        try:
+            url = "https://routes.googleapis.com/directions/v2:computeRoutes"
+            payload = {
+                "origin": {"location": {"latLng": {"latitude": b_info['start_lat'], "longitude": b_info['start_lon']}}},
+                "destination": {"location": {"latLng": {"latitude": b_info['end_lat'], "longitude": b_info['end_lon']}}},
+                "travelMode": "DRIVE",
+                "routingPreference": "TRAFFIC_AWARE"
+            }
+            res = requests.post(url, json=payload, headers=headers, timeout=6).json()
+            
+            if 'routes' in res and len(res['routes']) > 0:
+                route = res['routes'][0]
+                dist_m = route.get('distanceMeters', 0)
+                dur_str = str(route.get('duration', '0s')).replace('s', '')
+                dur_sec = float(dur_str) if dur_str else 0.0
                 
-                if 'routes' in res and len(res['routes']) > 0:
-                    route = res['routes'][0]
-                    dist_m = route.get('distanceMeters', 1000)
-                    dur_str = str(route.get('duration', '60s')).replace('s', '')
-                    dur_sec = float(dur_str) if dur_str else 60.0
-                    
+                if dist_m > 0 and dur_sec > 0:
                     dist_km = dist_m / 1000.0
                     hours = dur_sec / 3600.0
-                    if hours > 0:
-                        calc_speed = round(dist_km / hours)
-                        if calc_speed > 3:
-                            speed_kmh = max(10, min(calc_speed, 110))
-                            api_success_count += 1
-                
-                time.sleep(0.12)
-            except Exception:
-                pass
-
-        if speed_kmh is None:
-            speed_kmh = random.choice([32, 42, 50, 58, 65, 75])
-
-        if speed_kmh < 20:
-            status_str = '🔴 Критично / Затор'
-        elif speed_kmh < 32:
-            status_str = '🟡 Повільний рух'
-        else:
-            status_str = '🟢 Вільно (Live Routes)' if api_key and api_success_count > 0 else '🟢 Штатний режим'
+                    calc_speed = round(dist_km / hours)
+                    
+                    speed_str = f"{calc_speed} км/год"
+                    if calc_speed < 20:
+                        status_str = '🔴 Критично / Затор (Live)'
+                    elif calc_speed < 35:
+                        status_str = '🟡 Повільний рух (Live)'
+                    else:
+                        status_str = '🟢 Вільно (Live)'
+            elif 'error' in res:
+                status_str = f"❌ Помилка API: {res['error'].get('code', 'Unknown')}"
+            
+            time.sleep(0.12)
+        except Exception as e:
+            status_str = "❌ Помилка мережі"
 
         record = {
             'timestamp': timestamp_str,
@@ -139,7 +149,7 @@ def fetch_hybrid_telemetry(api_key):
             'name': b_info['name'],
             'region': b_info['region'],
             'state': status_str,
-            'speed': f"{speed_kmh} км/год",
+            'speed': speed_str,
             'source_name': b_info['source_name'],
             'source_url': b_info['source_url']
         }
@@ -151,36 +161,35 @@ def fetch_hybrid_telemetry(api_key):
 
 # --- Інтерфейс ---
 st.title("🌉 Оперативний моніторинг мостів та переправ України")
-st.markdown("Продакшн-система контролю трафіку з інтеграцією **Google Routes API** та довгостроковим архівом телеметрії.")
+st.markdown("Строгий контроль трафіку на основі **реальних даних Google Routes API (без симуляцій)**.")
 
 st.sidebar.header("⚙️ Конфігурація доступу")
 manual_key_input = st.sidebar.text_input("Routes API Key (якщо треба перевизначити):", type="password", value="")
 resolved_key = get_active_api_key(manual_key_input)
 
 if resolved_key:
-    st.sidebar.success("✅ Ключ успішно підхоплено (Live API активне)")
+    st.sidebar.success("✅ Ключ активний в системі")
 else:
-    st.sidebar.warning("⚠️ Автономний режим активний (ключ не знайдено)")
+    st.sidebar.warning("⚠️ Потрібен API ключ для реальних даних")
 
-tab_live, tab_history = st.tabs(["📊 Оперативна панель (Live)", "📈 Архів та історія (за місяць)"])
+tab_live, tab_history = st.tabs(["📊 Оперативна панель (Live)", "📈 Архів та історія"])
 
 with tab_live:
     col_btn1, col_info = st.columns([1, 2])
     with col_btn1:
-        if st.button("🔄 Оновити та зберегти зріз"):
-            st.session_state['cached_live'] = fetch_hybrid_telemetry(resolved_key)
-            st.success("Дані оновлено та занесено в архів!")
+        if st.button("🔄 Оновити зріз з Google Maps"):
+            st.session_state['cached_live'] = fetch_strict_live_telemetry(resolved_key)
+            st.success("Дані успішно оновлено з API!")
         else:
             if 'cached_live' not in st.session_state:
-                st.session_state['cached_live'] = fetch_hybrid_telemetry(resolved_key)
-            traffic_data = st.session_state['cached_live']
+                st.session_state['cached_live'] = fetch_strict_live_telemetry(resolved_key)
 
     with col_info:
-        st.info(f"Поточний час Києва: {get_kyiv_now().strftime('%Y-%m-%d %H:%M:%S')} (Автооновлення: кожні 30 хв)")
+        st.info(f"Поточний час Києва: {get_kyiv_now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     traffic_data = st.session_state.get('cached_live', {})
     if traffic_data:
-        st.markdown("### 📊 Поточний стан мостової мережі")
+        st.markdown("### 📊 Поточний стан мостової мережі (Live)")
         batch_items = list(traffic_data.items())
         for i in range(0, len(batch_items), 4):
             cols = st.columns(4)
@@ -201,13 +210,12 @@ with tab_live:
         st.dataframe(pd.DataFrame(table_rows), use_container_width=True)
 
 with tab_history:
-    st.subheader("🗂 Глибокий архів телеметрії (історія за тижні та місяці)")
+    st.subheader("🗂 Архів зібраних зрізів телеметрії")
     df_hist = load_history_csv()
     
     if not df_hist.empty:
         df_hist['dt'] = pd.to_datetime(df_hist['timestamp'], errors='coerce')
         
-        # Фільтр глибини архіву
         time_filter = st.selectbox(
             "Глибина перегляду архіву:", 
             ["Останні 24 години", "Останні 7 днів", "Останній місяць (30 днів)", "За весь час"],
@@ -237,4 +245,4 @@ with tab_history:
             mime="text/csv"
         )
     else:
-        st.info("Архів поки порожній. Натисніть кнопку «Оновити та зберегти зріз» на першій вкладці, щоб накопичити перші дані.")
+        st.info("Архів поки порожній. Натисніть кнопку «Оновити зріз з Google Maps».")
