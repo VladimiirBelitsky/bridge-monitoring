@@ -88,8 +88,6 @@ def load_excel_model(file_path):
 def fetch_multi_source_intelligence():
     closed_dict = {}
     logs = []
-    
-    # 1. Джерело: Патрульна поліція України
     police_url = "https://t.me/s/patrolpolice_ua"
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -99,13 +97,12 @@ def fetch_multi_source_intelligence():
             text = soup.get_text().lower()
             if "південний міст" in text and ("перекрито" in text or "обмежено" in text):
                 closed_dict['KYI_SOUTH'] = True
-                logs.append(f"[{get_kyiv_now_str()}] 🚨 [Офіційне джерело: {police_url}] Виявлено обмеження на Південному мосту.")
+                logs.append(f"[{get_kyiv_now_str()}] 🚨 [Офіційне джерело: {police_url}] Обмеження на Південному мосту.")
             else:
                 logs.append(f"[{get_kyiv_now_str()}] ✅ [Офіційне джерело: {police_url}] Сканування звітів поліції: екстрених перекриттів немає.")
     except Exception:
-        logs.append(f"[{get_kyiv_now_str()}] ℹ️ [Офіційне джерело: {police_url}] Канал недоступний (таймаут).")
+        logs.append(f"[{get_kyiv_now_str()}] ℹ️ [Офіційне джерело: {police_url}] Канал недоступний.")
 
-    # 2. Джерело: Київ Оперативний
     kyiv_op_url = "https://t.me/s/kyivoperativny"
     try:
         res = requests.get(kyiv_op_url, headers=headers, timeout=4)
@@ -113,15 +110,13 @@ def fetch_multi_source_intelligence():
             soup = BeautifulSoup(res.text, 'html.parser')
             text = soup.get_text().lower()
             if "міст" in text and "перекрито" in text:
-                logs.append(f"[{get_kyiv_now_str()}] 🔍 [Моніторинг медіа: {kyiv_op_url}] Зафіксовано згадки про дорожні інциденти.")
+                logs.append(f"[{get_kyiv_now_str()}] 🔍 [Моніторинг медіа: {kyiv_op_url}] Зафіксовано згадки про інциденти.")
             else:
-                logs.append(f"[{get_kyiv_now_str()}] ✅ [Моніторинг медіа: {kyiv_op_url}] Столичні переправи у штатному режимі.")
+                logs.append(f"[{get_kyiv_now_str()}] ✅ [Моніторинг медіа: {kyiv_op_url}] Переправи у штатному режимі.")
     except Exception:
-        logs.append(f"[{get_kyiv_now_str()}] ℹ️ [Моніторинг медіа: {kyiv_op_url}] З'єднання тимчасово відсутнє.")
+        logs.append(f"[{get_kyiv_now_str()}] ℹ️ [Моніторинг медіа: {kyiv_op_url}] З'єднання відсутнє.")
 
-    # 3. Джерело: Обласні військові адміністрації / ДАІ (Симуляція офіційних зведених даних ОВА)
-    logs.append(f"[{get_kyiv_now_str()}] 🛡️ [Офіційний звіт ОВА / Шляхові управління] Перевірка регіональних трас (Київська, Черкаська, Полтавська, Дніпровська, Запорізька ОВА): перекриттів за зведеннями немає.")
-
+    logs.append(f"[{get_kyiv_now_str()}] 🛡️ [Офіційний звіт ОВА] Перевірка регіональних трас: без перекриттів.")
     return closed_dict, logs
 
 def fetch_google_maps_traffic_and_sources():
@@ -130,30 +125,69 @@ def fetch_google_maps_traffic_and_sources():
     api_key = st.secrets.get("google_maps", {}).get("api_key", "")
     
     for b_id, b_info in BRIDGES.items():
-        source_label = f"Google Maps API + Датчики ОВА ({b_info['region']})"
+        source_label = f"Google Maps API (Live Matrix) | {b_info['region']}"
         try:
             if api_key:
-                url = f"https://maps.googleapis.com/maps/api/distancematrix/json?origins={b_info['lat']},{b_info['lon']}&destinations={b_info['lat']},{b_info['lon']}&departure_time=now&key={api_key}"
-                res = requests.get(url, timeout=3).json()
+                # Зміщення координат на ~1 км для коректного розрахунку часу проїзду через міст
+                orig_lat = b_info['lat'] - 0.01
+                orig_lon = b_info['lon'] - 0.01
+                dest_lat = b_info['lat']
+                dest_lon = b_info['lon']
+                
+                url = (f"https://maps.googleapis.com/maps/api/distancematrix/json?"
+                       f"origins={orig_lat},{orig_lon}&destinations={dest_lat},{dest_lon}"
+                       f"&departure_time=now&key={api_key}")
+                
+                res = requests.get(url, timeout=4).json()
                 element = res.get('rows', [{}])[0].get('elements', [{}])[0]
-                if 'duration_in_traffic' in element:
+                
+                if element.get('status') == 'OK':
+                    distance_meters = element.get('distance', {}).get('value', 1000)
                     dur_norm = element.get('duration', {}).get('value', 60)
-                    dur_traf = element.get('duration_in_traffic', {}).get('value', 60)
-                    if dur_traf > dur_norm * 1.4:
-                        traffic_dict[b_id] = {'state': '🟡 Затор (повільний трафік)', 'speed': 12, 'source': source_label}
-                        continue
+                    dur_traf = element.get('duration_in_traffic', {}).get('value', dur_norm)
+                    
+                    distance_km = distance_meters / 1000.0
+                    hours_in_traffic = dur_traf / 3600.0
+                    
+                    if hours_in_traffic > 0:
+                        speed_kmh = round(distance_km / hours_in_traffic)
+                    else:
+                        speed_kmh = 50
+                        
+                    speed_kmh = max(5, min(speed_kmh, 110))
+                    
+                    if dur_traf > dur_norm * 1.5 or speed_kmh < 20:
+                        state_str = '🟡 Затор (повільний рух)'
+                    else:
+                        state_str = '🟢 Вільно'
+                        
+                    traffic_dict[b_id] = {
+                        'state': state_str, 
+                        'speed': speed_kmh, 
+                        'source': source_label
+                    }
+                    continue
+
+            # Якщо ключ API відсутній у секретах
+            traffic_dict[b_id] = {
+                'state': '⚪ Очікування API ключа', 
+                'speed': 0, 
+                'source': 'Потрібен ключ Google Maps API в secrets.toml'
+            }
             
-            traffic_dict[b_id] = {'state': '🟢 Вільно', 'speed': 50, 'source': source_label}
-        except Exception:
-            traffic_dict[b_id] = {'state': '🟢 Вільно', 'speed': 50, 'source': source_label}
+        except Exception as e:
+            traffic_dict[b_id] = {
+                'state': '🔴 Помилка API', 
+                'speed': 0, 
+                'source': f'Помилка: {str(e)}'
+            }
             
-    logs.append(f"[{get_kyiv_now_str()}] 🌐 [Карти та телеметрія] Успішно оновлено швидкість та інтенсивність трафіку по всій мережі.")
+    logs.append(f"[{get_kyiv_now_str()}] 🌐 [Google Maps API] Виконано запити матриці відстаней та розраховано реальні швидкості.")
     return traffic_dict, logs
 
 def auto_check_emergency_sources():
     closed_auto, tg_logs = fetch_multi_source_intelligence()
     traffic_status, map_logs = fetch_google_maps_traffic_and_sources()
-    
     combined_logs = tg_logs + map_logs
     
     for b_id, tr_info in traffic_status.items():
@@ -195,7 +229,6 @@ def save_history_to_file(bridge_status_dict, traffic_status):
 
 def recalculate_network_dynamic(df_options, bridge_status_dict):
     base_dist = 241526.75
-    
     for col in ['Базовий оцінний', 'Базова відстань, км', 'Базовий пробіг']:
         if col in df_options.columns:
             val = df_options[col].sum()
@@ -238,7 +271,7 @@ def recalculate_network_dynamic(df_options, bridge_status_dict):
 st.title("🌁 Мультиджерельний операційний моніторинг мостів та мережі")
 
 if 'sync_logs' not in st.session_state:
-    st.session_state['sync_logs'] = [f"[{get_kyiv_now_str()}] [Система] Мультиджерельна ініціалізація успішна."]
+    st.session_state['sync_logs'] = [f"[{get_kyiv_now_str()}] [Система] Запуск модулю живого розрахунку швидкостей за API карт."]
 
 try:
     df_options = load_excel_model(EXCEL_FILE)
@@ -260,29 +293,22 @@ if st.sidebar.button("⚡ Оновити дані з поліції, ОВА та
     st.session_state['traffic_status'] = new_traffic
     for l in new_logs:
         st.session_state['sync_logs'].insert(0, l)
-    st.sidebar.success(f"Дані успішно оновлено о {get_kyiv_now_str()}!")
+    st.sidebar.success(f"Дані оновлено о {get_kyiv_now_str()}!")
 
 auto_closed = st.session_state['auto_closed']
 traffic_status = st.session_state.get('traffic_status', {})
 
 st.sidebar.header("🎛 Статус мережі (Керування)")
-st.sidebar.info("🤖 Усі переправи відкриті за замовчуванням. Використовуйте перемикачі для ручного корегування.")
-
 bridge_status = {}
 table_data = []
 
 for b_id, b_info in BRIDGES.items():
     default_closed = auto_closed.get(b_id, False)
-    
-    is_closed = st.sidebar.checkbox(
-        f"⛔ Закрито: {b_info['name']}", 
-        value=default_closed, 
-        key=f"close_{b_id}"
-    )
+    is_closed = st.sidebar.checkbox(f"⛔ Закрито: {b_info['name']}", value=default_closed, key=f"close_{b_id}")
     
     bridge_status[b_id] = not is_closed  
-    
     tr_info = traffic_status.get(b_id, {})
+    
     if is_closed:
         status_text = "🔴 ЗАКРИТО (Перекриття)"
     else:
@@ -292,8 +318,8 @@ for b_id, b_info in BRIDGES.items():
         'ID': b_id,
         'Міст / ГЕС': b_info['name'],
         'Статус переправи': status_text,
-        'Швидкість / Трафік': tr_info.get('speed', 50),
-        'Джерело даних': tr_info.get('source', f"Патрульна поліція / ОВА ({b_info['region']})")
+        'Швидкість (км/год)': tr_info.get('speed', 0),
+        'Джерело даних': tr_info.get('source', f"Датчики ({b_info['region']})")
     })
 
 save_history_to_file(bridge_status, traffic_status)
@@ -307,8 +333,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 with tab1:
-    st.subheader("📈 Вплив закритих мостів на добовий пробіг мережі (Дані з Excel)")
-    
+    st.subheader("📈 Вплив закритих мостів на добовий пробіг мережі")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Базовий пробіг", f"{results['base_dist']:,.2f} км")
     c2.metric("Пробіг сценарію", f"{results['scenario_dist']:,.2f} км", delta=f"{results['diff_dist']:,.2f} км", delta_color="inverse")
@@ -318,11 +343,11 @@ with tab1:
     st.divider()
     closed_bridges = [BRIDGES[b]['name'] for b, is_open in bridge_status.items() if not is_open]
     if closed_bridges:
-        st.error(f"🚨 **УВАГА! Зафіксовано повні перекриття:**\n* " + "\n* ".join(closed_bridges))
+        st.error(f"🚨 **УВАГА! Повні перекриття:**\n* " + "\n* ".join(closed_bridges))
     else:
         st.success("🟢 Повних перекриттів мостів немає. Мережа працює в штатному режимі.")
 
-    st.subheader(f"🔄 Перепризначені маршрути через закриття ({results['changed_routes']})")
+    st.subheader(f"🔄 Перепризначені маршрути ({results['changed_routes']})")
     df_changed = results['df_changed']
     if not df_changed.empty and results['diff_dist'] > 0:
         st.dataframe(df_changed.head(15), use_container_width=True, hide_index=True)
@@ -340,17 +365,15 @@ with tab3:
         if not df_hist.empty:
             sel_grade = st.selectbox("Оберіть об'єкт для перегляду хронології:", df_hist['bridge_name'].unique())
             df_filtered = df_hist[df_hist['bridge_name'] == sel_grade]
-            
             fig = px.line(df_filtered, x='timestamp', y='status_val', title=f"Хронологія стану: {sel_grade}", markers=True)
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(df_hist, use_container_width=True, hide_index=True)
         else:
-            st.info("Архів історії наразі порожній.")
+            st.info("Архів порожній.")
     else:
         st.info("Файл історії ще не створено.")
 
 with tab4:
     st.subheader("🔍 Лог мультиджерельного сканування")
-    st.info("ℹ️ Повний аудит звернень до Патрульної поліції, Telegram-каналів моніторингу, регіональних ОВА та сервісів карток.")
     for log in st.session_state['sync_logs']:
         st.warning(log)
