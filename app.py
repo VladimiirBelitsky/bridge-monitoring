@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 from datetime import datetime, timezone, timedelta
-import random
 import pandas as pd
 
 # Налаштування сторінки
@@ -13,7 +12,7 @@ st.set_page_config(
 
 KYIV_TZ = timezone(timedelta(hours=3))
 
-# Реєстр логістичних вузлів (РЦ та торгові точки) з координатами для API
+# Реєстр логістичних вузлів (РЦ та торгові точки) з координатами
 LOGISTIC_POINTS = {
     'RC_KYIV': {'name': 'РЦ Київ (Головний хаб)', 'lat': 50.4501, 'lon': 30.5234, 'region': 'Київський регіон'},
     'MUKACHEVO': {'name': 'ТТ / РЦ Мукачево', 'lat': 48.4451, 'lon': 22.7175, 'region': 'Закарпатська обл.'},
@@ -34,19 +33,33 @@ def fetch_logistics_telemetry():
     traffic_dict = {}
     timestamp = get_kyiv_now_str()
     
+    # Жорстке зчитування ключа
     api_key = ""
     try:
-        api_key = st.secrets.get("google_maps", {}).get("api_key", "")
-    except Exception:
-        pass
+        api_key = st.secrets["google_maps"]["api_key"]
+    except Exception as e:
+        st.error(f"⚠️ Помилка читання st.secrets для Google Maps: {e}")
     
     for p_id, p_info in LOGISTIC_POINTS.items():
-        speed_kmh = 60
-        status_str = '🟢 Норма (Графік дотримано)'
-        source_desc = f"Логістична мережа ({p_info['region']})"
+        if p_id == 'RC_KYIV':
+            traffic_dict[p_id] = {
+                'name': p_info['name'],
+                'region': p_info['region'],
+                'state': '🟢 Головний хаб (Активний)',
+                'speed': 0,
+                'source': 'Базовий вузол РЦ',
+                'timestamp': timestamp,
+                'lat': p_info['lat'],
+                'lon': p_info['lon']
+            }
+            continue
+            
+        speed_kmh = 50
+        status_str = '🟡 Очікування даних'
+        source_desc = 'Немає з'єднання'
         
         try:
-            if api_key and p_id != 'RC_KYIV':
+            if api_key:
                 orig_lat = LOGISTIC_POINTS['RC_KYIV']['lat']
                 orig_lon = LOGISTIC_POINTS['RC_KYIV']['lon']
                 dest_lat = p_info['lat']
@@ -56,38 +69,41 @@ def fetch_logistics_telemetry():
                        f"origins={orig_lat},{orig_lon}&destinations={dest_lat},{dest_lon}"
                        f"&departure_time=now&key={api_key}")
                 
-                res = requests.get(url, timeout=5).json()
-                element = res.get('rows', [{}])[0].get('elements', [{}])[0]
+                res = requests.get(url, timeout=6).json()
                 
-                if element.get('status') == 'OK':
-                    distance_meters = element.get('distance', {}).get('value', 50000)
-                    dur_norm = element.get('duration', {}).get('value', 3600)
-                    dur_traf = element.get('duration_in_traffic', {}).get('value', dur_norm)
-                    
-                    distance_km = distance_meters / 1000.0
-                    hours_in_traffic = dur_traf / 3600.0
-                    
-                    # Розрахунок швидкості потоку за формулою
-                    speed_kmh = round(distance_km / hours_in_traffic) if hours_in_traffic > 0 else 60
-                    speed_kmh = max(10, min(speed_kmh, 100))
-                    
-                    if dur_traf > dur_norm * 1.35 or speed_kmh < 35:
-                        status_str = '🟡 Повільний рух / Затор'
-                    
-                    source_desc = "Google Maps API (Live Telemetry)"
+                if res.get('status') == 'OK':
+                    element = res.get('rows', [{}])[0].get('elements', [{}])[0]
+                    if element.get('status') == 'OK':
+                        distance_meters = element.get('distance', {}).get('value', 10000)
+                        dur_norm = element.get('duration', {}).get('value', 3600)
+                        dur_traf = element.get('duration_in_traffic', {}).get('value', dur_norm)
+                        
+                        distance_km = distance_meters / 1000.0
+                        hours_in_traffic = dur_traf / 3600.0
+                        
+                        # Розрахунок швидкості потоку за формулою distance / hours_in_traffic
+                        speed_kmh = round(distance_km / hours_in_traffic) if hours_in_traffic > 0 else 50
+                        speed_kmh = max(10, min(speed_kmh, 120))
+                        
+                        if dur_traf > dur_norm * 1.3 or speed_kmh < 35:
+                            status_str = '🟡 Повільний рух / Затор'
+                        else:
+                            status_str = '🟢 Норма (Графік дотримано)'
+                            
+                        source_desc = "Google Maps API (Live Telemetry)"
+                    else:
+                        status_str = '🔴 Помилка елемента API'
+                        source_desc = element.get('status', 'Unknown')
                 else:
-                    speed_kmh = random.randint(45, 75)
-                    status_str = '🟢 За графіком'
-                    source_desc = "Автономний облік (Fallback)"
+                    status_str = '🔴 Помилка API статусу'
+                    source_desc = res.get('status', 'Unknown')
             else:
-                speed_kmh = 65
-                status_str = '🟢 Головний хаб (Активний)'
-                source_desc = "Базовий сервер РЦ"
+                status_str = '🔴 Відсутній API ключ'
+                source_desc = 'Перевірте secrets.toml'
                 
-        except Exception:
-            speed_kmh = 55
-            status_str = '🟢 Штатний режим'
-            source_desc = "Резервний канал зв'язку"
+        except Exception as err:
+            status_str = '🔴 Помилка зв\'язку'
+            source_desc = str(err)
 
         traffic_dict[p_id] = {
             'name': p_info['name'],
@@ -113,12 +129,12 @@ with col_btn1:
 
 logistics_data = fetch_logistics_telemetry()
 
-# Метрики по ключових вузлах
+# Метрики по ключових вузлах (пропускаємо головний РЦ у сітці швидкостей)
 st.markdown("### 📊 Статус магістральних напрямків від РЦ")
-batch_items = list(logistics_data.items())
-for i in range(0, len(batch_items), 4):
+non_rc_items = [(k, v) for k, v in logistics_data.items() if k != 'RC_KYIV']
+for i in range(0, len(non_rc_items), 4):
     cols = st.columns(4)
-    for j, (p_id, data) in enumerate(batch_items[i:i+4]):
+    for j, (p_id, data) in enumerate(non_rc_items[i:i+4]):
         with cols[j]:
             st.metric(
                 label=data['name'], 
@@ -150,7 +166,7 @@ if calc_route:
     
     api_key = ""
     try:
-        api_key = st.secrets.get("google_maps", {}).get("api_key", "")
+        api_key = st.secrets["google_maps"]["api_key"]
     except Exception:
         pass
         
@@ -161,31 +177,28 @@ if calc_route:
                      f"origins={orig_coords}&destinations={dest_coords}"
                      f"&departure_time=now&key={api_key}")
             res_m = requests.get(url_m, timeout=5).json()
-            el_m = res_m.get('rows', [{}])[0].get('elements', [{}])[0]
             
-            if el_m.get('status') == 'OK':
-                dist_txt = el_m.get('distance', {}).get('text', 'Н/Д')
-                dur_txt = el_m.get('duration', {}).get('text', 'Н/Д')
-                dur_traf_txt = el_m.get('duration_in_traffic', {}).get('text', dur_txt)
-                
-                st.success(f"✅ Маршрут успішно побудовано: **{logistics_data[origin_point]['name']}** ➡️ **{logistics_data[dest_point]['name']}**")
-                mc1, mc2, mc3 = st.columns(3)
-                mc1.metric("📏 Відстань маршруту", dist_txt)
-                mc2.metric("⏱️ Нормативний час", dur_txt)
-                mc3.metric("🚗 Час з урахуванням трафіку", dur_traf_txt)
-                success_calc = True
-        except Exception:
-            pass
+            if res_m.get('status') == 'OK':
+                el_m = res_m.get('rows', [{}])[0].get('elements', [{}])[0]
+                if el_m.get('status') == 'OK':
+                    dist_txt = el_m.get('distance', {}).get('text', 'Н/Д')
+                    dur_txt = el_m.get('duration', {}).get('text', 'Н/Д')
+                    dur_traf_txt = el_m.get('duration_in_traffic', {}).get('text', dur_txt)
+                    
+                    st.success(f"✅ Маршрут успішно побудовано: **{logistics_data[origin_point]['name']}** ➡️ **{logistics_data[dest_point]['name']}**")
+                    mc1, mc2, mc3 = st.columns(3)
+                    mc1.metric("📏 Відстань маршруту", dist_txt)
+                    mc2.metric("⏱️ Нормативний час", dur_txt)
+                    mc3.metric("🚗 Час з урахуванням трафіку", dur_traf_txt)
+                    success_calc = True
+        except Exception as e:
+            st.error(f"Помилка розрахунку маршруту: {e}")
             
     if not success_calc:
         if origin_point == dest_point:
             st.warning("⚠️ Пункт відправлення і призначення не можуть збігатися.")
         else:
-            st.info("ℹ️ Розраховано за базовою логістичною матрицею:")
-            mc1, mc2, mc3 = st.columns(3)
-            mc1.metric("📏 Відстань маршруту", "~ 340 км")
-            mc2.metric("⏱️ Нормативний час", "~ 4 год 20 хв")
-            mc3.metric("🚗 Статус проїзду", "Штатно / Без затримок")
+            st.error("❌ Не вдалося отримати дані від Google Maps API для цього плеча. Перевірте статус ключа утиліти.")
 
 st.markdown("---")
 st.subheader("📋 Реєстр активних вузлів розподілу (РЦ та ТТ)")
@@ -197,7 +210,7 @@ for p_id, data in logistics_data.items():
         "Об'єкт": data['name'],
         "Регіон": data['region'],
         "Статус": data['state'],
-        "Швидкість": f"{data['speed']} км/год",
+        "Швидкість": f"{data['speed']} км/год" if p_id != 'RC_KYIV' else "—",
         "Джерело телеметрії": data['source'],
         "Оновлено": data['timestamp']
     })
