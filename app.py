@@ -76,10 +76,10 @@ def load_history_csv():
             pass
     return pd.DataFrame(columns=['timestamp', 'id', 'name', 'region', 'state', 'speed', 'source_name', 'source_url'])
 
-def fetch_distance_matrix_telemetry(api_key):
+def fetch_routes_api_telemetry(api_key):
     """
-    Використовує Google Distance Matrix API для масового збору даних за один запит.
-    Це повністю вирішує проблему лімітів (оскільки запит один, а не 16 окремих).
+    Використовує сучасний Routes API v2 із затримкою між запитами, 
+    щоб уникнути ліміту 429 і задовольняти вимоги безпеки Google Cloud.
     """
     now = get_kyiv_now()
     timestamp_str = now.strftime('%Y-%m-%d %H:%M:%S')
@@ -94,98 +94,75 @@ def fetch_distance_matrix_telemetry(api_key):
             }
         return traffic_dict
 
-    # Формуємо списки координат для масового запиту в Distance Matrix
-    origins = []
-    destinations = []
-    bridge_ids = list(BRIDGES.keys())
-
-    for b_id in bridge_ids:
-        b = BRIDGES[b_id]
-        origins.append(f"{b['start_lat']},{b['start_lon']}")
-        destinations.append(f"{b['end_lat']},{b['end_lon']}")
-
-    url = "https://maps.googleapis.com/maps/api/distancematrix/json"
-    params = {
-        "origins": "|".join(origins),
-        "destinations": "|".join(destinations),
-        "mode": "driving",
-        "departure_time": "now",
-        "traffic_model": "pessimistic",
-        "key": api_key
+    headers = {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': api_key,
+        'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.travelAdvisory'
     }
 
     batch_records = []
-    try:
-        response = requests.get(url, params=params, timeout=10)
-        data = response.json()
+    url = "https://routes.googleapis.com/directions/v2:computeRoutes"
 
-        if data.get("status") == "OK":
-            rows = data.get("rows", [])
-            for i, b_id in enumerate(bridge_ids):
-                b_info = BRIDGES[b_id]
-                speed_str = "Н/Д"
-                status_str = "❌ Дані недоступні"
-
-                try:
-                    element = rows[i]["elements"][i]  # Зіставляємо origin[i] з destination[i] за індексом
-                    if element.get("status") == "OK":
-                        dist_m = element.get("distance", {}).get("value", 0)
-                        # Використовуємо duration_in_traffic, якщо є звіт про затори, інакше звичайний duration
-                        dur_sec = element.get("duration_in_traffic", {}).get("value", element.get("duration", {}).get("value", 0))
-
-                        if dist_m > 0 and dur_sec > 0:
-                            dist_km = dist_m / 1000.0
-                            hours = dur_sec / 3600.0
-                            calc_speed = round(dist_km / hours)
-
-                            speed_str = f"{calc_speed} км/год"
-                            if calc_speed < 20:
-                                status_str = '🔴 Критично / Затор (Live)'
-                            elif calc_speed < 35:
-                                status_str = '🟡 Повільний рух (Live)'
-                            else:
-                                status_str = '🟢 Вільно (Live)'
-                    else:
-                        status_str = f"❌ Статус елемента: {element.get('status')}"
-                except Exception:
-                    status_str = "❌ Помилка розбору елемента"
-
-                record = {
-                    'timestamp': timestamp_str, 'id': b_id, 'name': b_info['name'],
-                    'region': b_info['region'], 'state': status_str, 'speed': speed_str,
-                    'source_name': b_info['source_name'], 'source_url': b_info['source_url']
-                }
-                traffic_dict[b_id] = record
-                batch_records.append(record)
-        else:
-            err_msg = data.get("error_message", data.get("status", "Unknown Error"))
-            for b_id, b_info in BRIDGES.items():
-                record = {
-                    'timestamp': timestamp_str, 'id': b_id, 'name': b_info['name'],
-                    'region': b_info['region'], 'state': f"❌ Помилка API: {err_msg}", 'speed': 'Н/Д',
-                    'source_name': b_info['source_name'], 'source_url': b_info['source_url']
-                }
-                traffic_dict[b_id] = record
-                batch_records.append(record)
-    except Exception as e:
-        for b_id, b_info in BRIDGES.items():
-            record = {
-                'timestamp': timestamp_str, 'id': b_id, 'name': b_info['name'],
-                'region': b_info['region'], 'state': "❌ Помилка мережі", 'speed': 'Н/Д',
-                'source_name': b_info['source_name'], 'source_url': b_info['source_url']
+    for b_id, b_info in BRIDGES.items():
+        speed_str = "Н/Д"
+        status_str = "❌ Немає зв'язку з API"
+        
+        try:
+            payload = {
+                "origin": {"location": {"latLng": {"latitude": b_info['start_lat'], "longitude": b_info['start_lon']}}},
+                "destination": {"location": {"latLng": {"latitude": b_info['end_lat'], "longitude": b_info['end_lon']}}},
+                "travelMode": "DRIVE",
+                "routingPreference": "TRAFFIC_AWARE"
             }
-            traffic_dict[b_id] = record
-            batch_records.append(record)
+            res = requests.post(url, json=payload, headers=headers, timeout=8).json()
+            
+            if 'routes' in res and len(res['routes']) > 0:
+                route = res['routes'][0]
+                dist_m = route.get('distanceMeters', 0)
+                dur_str = str(route.get('duration', '0s')).replace('s', '')
+                dur_sec = float(dur_str) if dur_str else 0.0
+                
+                if dist_m > 0 and dur_sec > 0:
+                    dist_km = dist_m / 1000.0
+                    hours = dur_sec / 3600.0
+                    calc_speed = round(dist_km / hours)
+                    
+                    speed_str = f"{calc_speed} км/год"
+                    if calc_speed < 20:
+                        status_str = '🔴 Критично / Затор (Live)'
+                    elif calc_speed < 35:
+                        status_str = '🟡 Повільний рух (Live)'
+                    else:
+                        status_str = '🟢 Вільно (Live)'
+            elif 'error' in res:
+                err_code = res['error'].get('code', 'Unknown')
+                err_msg = res['error'].get('message', 'Помилка')
+                status_str = f"❌ API Error {err_code}"
+                if err_code == 429:
+                    time.sleep(2) # Додаткова пауза при ліміті
+            
+            # Робимо безпечну паузу в 0.8 секунди між кожним запитом до Routes API
+            time.sleep(0.8)
+        except Exception:
+            status_str = "❌ Помилка мережі"
+
+        record = {
+            'timestamp': timestamp_str, 'id': b_id, 'name': b_info['name'],
+            'region': b_info['region'], 'state': status_str, 'speed': speed_str,
+            'source_name': b_info['source_name'], 'source_url': b_info['source_url']
+        }
+        traffic_dict[b_id] = record
+        batch_records.append(record)
 
     save_to_history_csv(batch_records)
     return traffic_dict
 
 # --- Інтерфейс ---
 st.title("🌉 Оперативний моніторинг мостів та переправ України")
-st.markdown("Строгий контроль трафіку на основі **масових даних Google Distance Matrix API (без симуляцій)**.")
+st.markdown("Строгий контроль трафіку на основі **сучасного Routes API v2 (реальні дані з урахуванням заторів)**.")
 
 st.sidebar.header("⚙️ Конфігурація доступу")
-manual_key_input = st.sidebar.text_input("Google Maps API Key (якщо треба перевизначити):", type="password", value="")
+manual_key_input = st.sidebar.text_input("Routes API Key (якщо треба перевизначити):", type="password", value="")
 resolved_key = get_active_api_key(manual_key_input)
 
 if resolved_key:
@@ -199,11 +176,13 @@ with tab_live:
     col_btn1, col_info = st.columns([1, 2])
     with col_btn1:
         if st.button("🔄 Оновити зріз з Google Maps"):
-            st.session_state['cached_live'] = fetch_distance_matrix_telemetry(resolved_key)
-            st.success("Дані успішно оновлено через Distance Matrix API!")
+            with st.spinner("Збираємо телеметрію по 16 вузлах через Routes API..."):
+                st.session_state['cached_live'] = fetch_routes_api_telemetry(resolved_key)
+            st.success("Дані успішно оновлено!")
         else:
             if 'cached_live' not in st.session_state:
-                st.session_state['cached_live'] = fetch_distance_matrix_telemetry(resolved_key)
+                with st.spinner("Завантаження початкових даних..."):
+                    st.session_state['cached_live'] = fetch_routes_api_telemetry(resolved_key)
 
     with col_info:
         st.info(f"Поточний час Києва: {get_kyiv_now().strftime('%Y-%m-%d %H:%M:%S')}")
