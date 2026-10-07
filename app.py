@@ -12,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Автоматичне оновлення сторінки раз на 30 хвилин
+# Автоматичне оновлення сторінки раз на 30 хвилин (30 хв * 60 сек * 1000 мс)
 st_autorefresh(interval=30 * 60 * 1000, key="datarefresh")
 
 KYIV_TZ = timezone(timedelta(hours=3))
@@ -82,7 +82,6 @@ def fetch_strict_live_telemetry(api_key):
     traffic_dict = {}
     
     if not api_key:
-        # Якщо ключ взагалі не заданий, повертаємо статус попередження для всіх
         for b_id, b_info in BRIDGES.items():
             traffic_dict[b_id] = {
                 'timestamp': timestamp_str,
@@ -137,10 +136,14 @@ def fetch_strict_live_telemetry(api_key):
                     else:
                         status_str = '🟢 Вільно (Live)'
             elif 'error' in res:
-                status_str = f"❌ Помилка API: {res['error'].get('code', 'Unknown')}"
+                err_code = res['error'].get('code', 'Unknown')
+                status_str = f"❌ Помилка API: {err_code}"
+                if err_code == 429:
+                    time.sleep(1.5)
             
-            time.sleep(0.12)
-        except Exception as e:
+            # Плавна пауза між запитами, щоб не перевищувати ліміти QPS
+            time.sleep(0.6)
+        except Exception:
             status_str = "❌ Помилка мережі"
 
         record = {
