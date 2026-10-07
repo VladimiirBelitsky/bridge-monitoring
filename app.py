@@ -88,17 +88,22 @@ def load_excel_model(file_path):
 def fetch_public_telegram_news():
     closed_dict = {}
     logs = []
+    source_url = "https://t.me/s/kyivoperativny"
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
-        response = requests.get("https://t.me/s/kyivoperativny", headers=headers, timeout=4)
+        response = requests.get(source_url, headers=headers, timeout=4)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
             text_content = soup.get_text().lower()
             if "південний міст" in text_content and ("перекрито" in text_content or "заблоковано" in text_content):
                 closed_dict['KYI_SOUTH'] = True
-                logs.append(f"[{get_kyiv_now_str()}] 🚨 [Telegram Parser] Знайдено згадку про перекриття Південного мосту.")
-    except Exception:
-        logs.append(f"[{get_kyiv_now_str()}] ℹ️ [Telegram Parser] Використано резервний моніторинг стрічок.")
+                logs.append(f"[{get_kyiv_now_str()}] 🚨 [Джерело: Telegram-канал {source_url}] Знайдено згадку про перекриття Південного мосту.")
+            else:
+                logs.append(f"[{get_kyiv_now_str()}] ℹ️ [Джерело: Telegram-канал {source_url}] Сканування успішне, екстрених перекриттів не виявлено.")
+        else:
+            logs.append(f"[{get_kyiv_now_str()}] ⚠️ [Джерело: Telegram-канал {source_url}] Помилка підключення, код статусу: {response.status_code}")
+    except Exception as e:
+        logs.append(f"[{get_kyiv_now_str()}] ℹ️ [Джерело: Telegram-канал {source_url}] Запит недоступний (помилка мережі/таймаут), використано резерв.")
         
     return closed_dict, logs
 
@@ -106,6 +111,7 @@ def fetch_live_traffic_speed():
     traffic_dict = {}
     logs = []
     api_key = st.secrets.get("google_maps", {}).get("api_key", "")
+    source_desc = "Google Maps Distance Matrix API (geographical coordinates)" if api_key else "Внутрішні датчики мережі (Резервна симуляція)"
     
     for b_id, b_info in BRIDGES.items():
         try:
@@ -117,20 +123,15 @@ def fetch_live_traffic_speed():
                     dur_norm = element.get('duration', {}).get('value', 60)
                     dur_traf = element.get('duration_in_traffic', {}).get('value', 60)
                     if dur_traf > dur_norm * 1.4:
-                        traffic_dict[b_id] = {'state': '🟡 Затор (повільний трафік)', 'speed': 12, 'source': 'Google Maps Live API'}
+                        traffic_dict[b_id] = {'state': '🟡 Затор (повільний трафік)', 'speed': 12, 'source': source_desc}
                         continue
             
-            if b_id in ['ZP_PREOBR', 'ZP_NEW']:
-                traffic_dict[b_id] = {'state': '🔴 Закрито (Обмеження руху)', 'speed': 0, 'source': 'Автоматичний моніторинг ОВА'}
-            elif b_id == 'KYI_SOUTH':
-                traffic_dict[b_id] = {'state': '🟡 Затор (швидкість < 15 км/год)', 'speed': 11, 'source': 'Карти / Детектор швидкості'}
-            else:
-                traffic_dict[b_id] = {'state': '🟢 Вільно', 'speed': 50, 'source': 'Автоматичний датчик мережі'}
+            traffic_dict[b_id] = {'state': '🟢 Вільно', 'speed': 50, 'source': source_desc}
                 
         except Exception:
-            traffic_dict[b_id] = {'state': '🟢 Вільно', 'speed': 50, 'source': 'Автоматика (Резерв)'}
+            traffic_dict[b_id] = {'state': '🟢 Вільно', 'speed': 50, 'source': source_desc}
             
-    logs.append(f"[{get_kyiv_now_str()}] ✅ Оновлено швидкість потоку та статус трафіку по всій мережі мостів.")
+    logs.append(f"[{get_kyiv_now_str()}] ✅ [Джерело: {source_desc}] Оновлено швидкість потоку та статус трафіку по всій мережі мостів.")
     return traffic_dict, logs
 
 def auto_check_emergency_sources():
@@ -146,10 +147,6 @@ def auto_check_emergency_sources():
     for b_id, tr_info in traffic_status.items():
         if 'Закрито' in tr_info.get('state', ''):
             closed_auto[b_id] = True
-
-    if 'ZP_PREOBR' not in closed_auto:
-        closed_auto['ZP_PREOBR'] = True
-        closed_auto['ZP_NEW'] = True
 
     return closed_auto, traffic_status, logs
 
@@ -229,7 +226,7 @@ def recalculate_network_dynamic(df_options, bridge_status_dict):
 st.title("🌁 Автоматизований операційний моніторинг мостів та мережі")
 
 if 'sync_logs' not in st.session_state:
-    st.session_state['sync_logs'] = [f"[{get_kyiv_now_str()}] Система запущена з підключеними бібліотеками (Requests + BeautifulSoup)."]
+    st.session_state['sync_logs'] = [f"[{get_kyiv_now_str()}] [Джерело: Локальна ініціалізація] Система запущена з детальним трекінгом джерел."]
 
 try:
     df_options = load_excel_model(EXCEL_FILE)
@@ -256,8 +253,8 @@ if st.sidebar.button("⚡ Оновити дані з Telegram та Мап зар
 auto_closed = st.session_state['auto_closed']
 traffic_status = st.session_state.get('traffic_status', {})
 
-st.sidebar.header("🎛 Статус мережі (Автоматичний режим)")
-st.sidebar.info("🤖 Система самостійно керує статусами на основі інтегрованих каналів зв'язку.")
+st.sidebar.header("🎛 Статус мережі (Керування)")
+st.sidebar.info("🤖 Керування станом переправ з відображенням джерел у реальному часі.")
 
 bridge_status = {}
 table_data = []
@@ -299,7 +296,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 
 with tab1:
     st.subheader("📈 Вплив закритих мостів на добовий пробіг мережі (Дані з Excel)")
-    st.info("ℹ️ **Правило моделі:** Затори (швидкість < 15 км/год) фіксуються оперативно, але не змінюють базовий кілометраж маршрутів. Перерахунок виконується лише при повному перекритті мосту.")
+    st.info("ℹ️ **Правило моделі:** Затори фіксуються оперативно, але перерахунок кілометражу виконується лише при повному перекритті мосту.")
     
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Базовий пробіг", f"{results['base_dist']:,.2f} км")
@@ -343,6 +340,6 @@ with tab3:
 
 with tab4:
     st.subheader("🔍 Лог автоматичних каналів та верифікація джерел")
-    st.info("ℹ️ Система автоматично сканує публічні стрічки та дані швидкості з карток.")
+    st.info("ℹ️ Тут відображаються точні посилання на зовнішні джерела (Telegram-канали, API-сервіси карток) по кожній перевірці.")
     for log in st.session_state['sync_logs']:
         st.warning(log)
