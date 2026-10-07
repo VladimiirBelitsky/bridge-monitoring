@@ -163,7 +163,7 @@ if calc_route:
             res_m = requests.get(url_m, timeout=5).json()
             el_m = res_m.get('rows', [{}])[0].get('elements', [{}])[0]
             
-            if el_m.get('status'] == 'OK':
+            if el_m.get('status') == 'OK':
                 dist_txt = el_m.get('distance', {}).get('text', 'Н/Д')
                 dur_txt = el_m.get('duration', {}).get('text', 'Н/Д')
                 dur_traf_txt = el_m.get('duration_in_traffic', {}).get('text', dur_txt)
