@@ -13,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Автоматичне оновлення сторінки раз на 30 хвилин
+# Автоматичне оновлення сторінки раз на 30 хвилин (30 хв * 60 сек * 1000 мс)
 st_autorefresh(interval=30 * 60 * 1000, key="datarefresh")
 
 KYIV_TZ = timezone(timedelta(hours=3))
@@ -165,7 +165,7 @@ tab_live, tab_history = st.tabs(["📊 Оперативна панель (Live)"
 with tab_live:
     col_btn1, col_info = st.columns([1, 2])
     with col_btn1:
-        if st.button("🔄 Оновити та зберегти зріз"):
+        if st.button("🔄 Оновити та зберегти зріз зараз"):
             st.session_state['cached_live'] = fetch_hybrid_telemetry(resolved_key)
             st.success("Дані оновлено та занесено в архів!")
         else:
@@ -235,4 +235,4 @@ with tab_history:
             mime="text/csv"
         )
     else:
-        st.info("Архів поки порожній. Натисніть кнопку «Оновити та зберегти зріз» на першій вкладці, щоб накопичити перші дані.")
+        st.info("Архів поки порожній. Натисніть кнопку «Оновити та зберегти зріз зараз» на першій вкладці, щоб накопичити перші дані.")
