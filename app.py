@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 from datetime import datetime, timezone, timedelta
+import random
 import pandas as pd
 
 # Налаштування сторінки
@@ -35,34 +36,41 @@ BRIDGES = {
 def get_kyiv_now():
     return datetime.now(KYIV_TZ)
 
-def get_api_key():
+def get_resolved_api_key(sidebar_key):
+    if sidebar_key.strip():
+        return sidebar_key.strip()
     try:
-        if "google_maps" in st.secrets and "api_key" in st.secrets["google_maps"]:
-            return st.secrets["google_maps"]["api_key"]
+        # Перевірка всіх можливих варіантів у st.secrets
+        if "google_maps" in st.secrets:
+            if isinstance(st.secrets["google_maps"], dict) and "api_key" in st.secrets["google_maps"]:
+                return st.secrets["google_maps"]["api_key"]
+            if isinstance(st.secrets["google_maps"], str):
+                return st.secrets["google_maps"]
         if "api_key" in st.secrets:
             return st.secrets["api_key"]
         for k, v in st.secrets.items():
-            if isinstance(v, dict) and "api_key" in v:
-                return v["api_key"]
+            if isinstance(v, str):
+                return v
+            if isinstance(v, dict):
+                for sub_k, sub_v in v.items():
+                    if "key" in sub_k.lower() and isinstance(sub_v, str):
+                        return sub_v
     except Exception:
         pass
     return ""
 
-# Ініціалізація історії в сесії
 if 'history' not in st.session_state:
     st.session_state['history'] = []
 
 if 'last_update' not in st.session_state:
     st.session_state['last_update'] = None
 
-def fetch_telemetry(force=False):
+def fetch_telemetry(api_key, force=False):
     now = get_kyiv_now()
-    # Автоматичне оновлення кожні 30 хв або примусово
     if not force and st.session_state['last_update'] and (now - st.session_state['last_update']).total_seconds() < 1800:
         if 'cached_data' in st.session_state:
             return st.session_state['cached_data']
 
-    api_key = get_api_key()
     timestamp_str = now.strftime('%Y-%m-%d %H:%M:%S')
     traffic_dict = {}
 
@@ -111,7 +119,7 @@ def fetch_telemetry(force=False):
                     status_str = '🟡 Обмеження даних API'
             else:
                 status_str = '🔴 Відсутній ключ API'
-                source_desc = 'Перевірте secrets.toml'
+                source_desc = 'Введіть ключ у сайдбарі'
 
         except Exception as e:
             status_str = '🟡 Помилка запиту'
@@ -138,13 +146,23 @@ def fetch_telemetry(force=False):
 st.title("🌉 Оперативний моніторинг мостів та переправ України")
 st.markdown("Моніторинг у реальному часі: швидкість потоку, затори, закриття, автоматичне оновлення кожні 30 хв та історія змін.")
 
+# Бокова панель для введення або перевірки ключа API
+st.sidebar.header("⚙️ Налаштування доступу")
+input_key = st.sidebar.text_input("Google Maps API Key", type="password", value="")
+active_api_key = get_resolved_api_key(input_key)
+
+if active_api_key:
+    st.sidebar.success("✅ Ключ API активний і застосовується!")
+else:
+    st.sidebar.warning("⚠️ Ключ не знайдено в secrets і не введено в полі.")
+
 col_btn1, col_btn2, col_info = st.columns([1, 1, 2])
 with col_btn1:
     if st.button("🔄 Оновити статуси зараз"):
-        traffic_data = fetch_telemetry(force=True)
-        st.success("Дані успішно оновлено з джерел!")
+        traffic_data = fetch_telemetry(active_api_key, force=True)
+        st.success("Дані успішно оновлено!")
     else:
-        traffic_data = fetch_telemetry(force=False)
+        traffic_data = fetch_telemetry(active_api_key, force=False)
 
 with col_info:
     last_up = st.session_state.get('last_update')
