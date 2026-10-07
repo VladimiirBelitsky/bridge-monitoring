@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 from datetime import datetime, timezone, timedelta
-import random
 import pandas as pd
 
 # Налаштування сторінки
@@ -36,24 +35,26 @@ BRIDGES = {
 def get_kyiv_now():
     return datetime.now(KYIV_TZ)
 
-def get_resolved_api_key(sidebar_key):
-    if sidebar_key.strip():
-        return sidebar_key.strip()
+def get_active_api_key(manual_input=""):
+    if manual_input.strip():
+        return manual_input.strip()
+    
+    # Прямий перебір усіх можливих варіантів у st.secrets
     try:
-        # Перевірка всіх можливих варіантів у st.secrets
         if "google_maps" in st.secrets:
-            if isinstance(st.secrets["google_maps"], dict) and "api_key" in st.secrets["google_maps"]:
-                return st.secrets["google_maps"]["api_key"]
-            if isinstance(st.secrets["google_maps"], str):
-                return st.secrets["google_maps"]
+            gm = st.secrets["google_maps"]
+            if isinstance(gm, dict) and "api_key" in gm:
+                return gm["api_key"]
+            if isinstance(gm, str):
+                return gm
         if "api_key" in st.secrets:
             return st.secrets["api_key"]
         for k, v in st.secrets.items():
-            if isinstance(v, str):
+            if isinstance(v, str) and len(v) > 20: # Схоже на API ключ
                 return v
             if isinstance(v, dict):
                 for sub_k, sub_v in v.items():
-                    if "key" in sub_k.lower() and isinstance(sub_v, str):
+                    if isinstance(sub_v, str) and len(sub_v) > 20:
                         return sub_v
     except Exception:
         pass
@@ -75,8 +76,8 @@ def fetch_telemetry(api_key, force=False):
     traffic_dict = {}
 
     for b_id, b_info in BRIDGES.items():
-        speed_kmh = 55
-        status_str = '🟢 Вільно (Рух йде)'
+        speed_kmh = 50
+        status_str = '🟢 Вільно'
         delay_min = 0
         source_desc = "Google Maps API (Live)"
 
@@ -92,34 +93,40 @@ def fetch_telemetry(api_key, force=False):
                        f"&departure_time=now&key={api_key}")
 
                 res = requests.get(url, timeout=5).json()
-                element = res.get('rows', [{}])[0].get('elements', [{}])[0]
+                
+                if res.get('status') == 'OK':
+                    element = res.get('rows', [{}])[0].get('elements', [{}])[0]
+                    if element.get('status') == 'OK':
+                        distance_m = element.get('distance', {}).get('value', 1000)
+                        dur_norm = element.get('duration', {}).get('value', 60)
+                        dur_traf = element.get('duration_in_traffic', {}).get('value', dur_norm)
 
-                if element.get('status') == 'OK':
-                    distance_m = element.get('distance', {}).get('value', 1000)
-                    dur_norm = element.get('duration', {}).get('value', 60)
-                    dur_traf = element.get('duration_in_traffic', {}).get('value', dur_norm)
+                        distance_km = distance_m / 1000.0
+                        hours_traf = dur_traf / 3600.0
 
-                    distance_km = distance_m / 1000.0
-                    hours_traf = dur_traf / 3600.0
+                        speed_kmh = round(distance_km / hours_traf) if hours_traf > 0 else 50
+                        speed_kmh = max(5, min(speed_kmh, 110))
 
-                    speed_kmh = round(distance_km / hours_traf) if hours_traf > 0 else 55
-                    speed_kmh = max(5, min(speed_kmh, 110))
+                        delay_sec = max(0, dur_traf - dur_norm)
+                        delay_min = round(delay_sec / 60)
 
-                    delay_sec = max(0, dur_traf - dur_norm)
-                    delay_min = round(delay_sec / 60)
-
-                    if dur_traf > dur_norm * 1.8 or speed_kmh < 15:
-                        status_str = '🔴 Закритий / Критично'
-                        speed_kmh = 0
-                    elif dur_traf > dur_norm * 1.35 or speed_kmh < 30:
-                        status_str = '🟡 Ускладнено / Затор'
+                        if dur_traf > dur_norm * 1.8 or speed_kmh < 15:
+                            status_str = '🔴 Закритий / Критично'
+                            speed_kmh = 0
+                        elif dur_traf > dur_norm * 1.3 or speed_kmh < 30:
+                            status_str = '🟡 Ускладнено / Затор'
+                        else:
+                            status_str = '🟢 Вільно'
+                        source_desc = "Google Maps API (Live)"
                     else:
-                        status_str = '🟢 Вільно (Рух йде)'
+                        status_str = f"🟡 API Element: {element.get('status')}"
+                        source_desc = "Distance Matrix Error"
                 else:
-                    status_str = '🟡 Обмеження даних API'
+                    status_str = f"🔴 API Error: {res.get('status')}"
+                    source_desc = "Invalid API Key / Quota"
             else:
                 status_str = '🔴 Відсутній ключ API'
-                source_desc = 'Введіть ключ у сайдбарі'
+                source_desc = 'Введіть ключ у налаштуваннях'
 
         except Exception as e:
             status_str = '🟡 Помилка запиту'
@@ -146,23 +153,23 @@ def fetch_telemetry(api_key, force=False):
 st.title("🌉 Оперативний моніторинг мостів та переправ України")
 st.markdown("Моніторинг у реальному часі: швидкість потоку, затори, закриття, автоматичне оновлення кожні 30 хв та історія змін.")
 
-# Бокова панель для введення або перевірки ключа API
-st.sidebar.header("⚙️ Налаштування доступу")
-input_key = st.sidebar.text_input("Google Maps API Key", type="password", value="")
-active_api_key = get_resolved_api_key(input_key)
+st.sidebar.header("⚙️ Керування ключем API")
+manual_key_input = st.sidebar.text_input("Введіть ключ Google Maps API:", type="password", value="")
 
-if active_api_key:
-    st.sidebar.success("✅ Ключ API активний і застосовується!")
+resolved_key = get_active_api_key(manual_key_input)
+
+if resolved_key:
+    st.sidebar.success("✅ Ключ підключено до системи!")
 else:
-    st.sidebar.warning("⚠️ Ключ не знайдено в secrets і не введено в полі.")
+    st.sidebar.error("❌ Ключ не знайдено ні в secrets, ні в полі вводу.")
 
 col_btn1, col_btn2, col_info = st.columns([1, 1, 2])
 with col_btn1:
     if st.button("🔄 Оновити статуси зараз"):
-        traffic_data = fetch_telemetry(active_api_key, force=True)
-        st.success("Дані успішно оновлено!")
+        traffic_data = fetch_telemetry(resolved_key, force=True)
+        st.success("Дані успішно оновлено з джерел!")
     else:
-        traffic_data = fetch_telemetry(active_api_key, force=False)
+        traffic_data = fetch_telemetry(resolved_key, force=False)
 
 with col_info:
     last_up = st.session_state.get('last_update')
