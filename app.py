@@ -5,7 +5,7 @@ import pandas as pd
 
 # Налаштування сторінки
 st.set_page_config(
-    page_title="Оперативний моніторинг мережі та переправ",
+    page_title="Оперативний моніторинг мостів та переправ",
     page_icon="🌉",
     layout="wide"
 )
@@ -16,11 +16,9 @@ KYIV_TZ = timezone(timedelta(hours=3))
 def load_network_model():
     excel_path = "Робоча_модель_мережі_ФІНАЛ 1.xlsx"
     bridges_df = pd.read_excel(excel_path, sheet_name="05_Переходи")
-    rc_df = pd.read_excel(excel_path, sheet_name="02_РЦ")
-    tt_df = pd.read_excel(excel_path, sheet_name="03_ТТ")
-    return bridges_df, rc_df, tt_df
+    return bridges_df
 
-bridges_df, rc_df, tt_df = load_network_model()
+bridges_df = load_network_model()
 
 def get_kyiv_now_str():
     return datetime.now(KYIV_TZ).strftime('%Y-%m-%d %H:%M:%S')
@@ -38,14 +36,9 @@ def get_api_key():
         pass
     return ""
 
-st.title("🌉 Оперативний моніторинг транспортної мережі та критичних переходів")
-st.markdown("Моніторинг статусів мостів/ГЕС відповідно до робочої моделі мережі та оцінка впливу на плечі доставки між РЦ і ТТ.")
-
-# Бокова панель для керування станом переходів (як у конструкторі сценаріїв)
-st.sidebar.header("🎛️ Конструктор сценаріїв (Статус переправ)")
+# Управління станом переходів у боковій панелі
+st.sidebar.header("🎛️ Статус переправ (Конструктор)")
 bridge_statuses = {}
-
-# Очистимо назви колонок від можливих пробілів
 bridges_df.columns = bridges_df.columns.str.strip()
 
 for idx, row in bridges_df.iterrows():
@@ -55,11 +48,14 @@ for idx, row in bridges_df.iterrows():
     if pd.notna(b_id):
         is_active = st.sidebar.selectbox(
             f"{b_name} ({b_region})",
-            options=["Працює (Доступний)", "Закритий (Аварія/Ремонт)"],
+            options=["Працює", "Закритий"],
             index=0,
             key=f"bridge_{b_id}"
         )
-        bridge_statuses[b_id] = (is_active.startswith("Працює"))
+        bridge_statuses[b_id] = (is_active == "Працює")
+
+st.title("🌉 Оперативний моніторинг мостів та переправ у реальному часі")
+st.markdown("Панель контролю швидкості потоку, заторів та затримок на критичних переправах мережі.")
 
 col_btn1, col_btn2 = st.columns([1, 4])
 with col_btn1:
@@ -67,9 +63,9 @@ with col_btn1:
         st.rerun()
 
 api_key = get_api_key()
+timestamp = get_kyiv_now_str()
 
-# Основна таблиця переправ та їх поточного стану
-st.markdown("### 📊 Статус критичних переходів мережі")
+# Збір телеметрії по всіх мостах/переправах з файлу
 bridge_cards_data = []
 
 for idx, row in bridges_df.iterrows():
@@ -85,56 +81,81 @@ for idx, row in bridges_df.iterrows():
     is_working = bridge_statuses.get(b_id, True)
     speed_kmh = 50
     delay_min = 0
-    status_str = '🟢 Відкрито / Норма' if is_working else '🔴 Закритий (Обхід маршруту)'
     
-    if is_working and api_key and pd.notna(lat) and pd.notna(lon):
-        try:
-            orig_lat = float(lat) - 0.008
-            orig_lon = float(lon) - 0.008
-            url = (f"https://maps.googleapis.com/maps/api/distancematrix/json?"
-                   f"origins={orig_lat},{orig_lon}&destinations={lat},{lon}"
-                   f"&departure_time=now&key={api_key}")
-            res = requests.get(url, timeout=4).json()
-            if res.get('status') == 'OK':
-                element = res.get('rows', [{}])[0].get('elements', [{}])[0]
-                if element.get('status') == 'OK':
-                    dist_m = element.get('distance', {}).get('value', 1000)
-                    dur_norm = element.get('duration', {}).get('value', 60)
-                    dur_traf = element.get('duration_in_traffic', {}).get('value', dur_norm)
-                    speed_kmh = round((dist_m / 1000.0) / (dur_traf / 3600.0))
-                    speed_kmh = max(5, min(speed_kmh, 110))
-                    delay_min = round(max(0, dur_traf - dur_norm) / 60)
-                    if dur_traf > dur_norm * 1.3:
-                        status_str = '🟡 Ускладнено / Затор'
-        except Exception:
-            pass
-    elif not is_working:
+    if not is_working:
+        status_str = '🔴 Закритий'
         speed_kmh = 0
-        delay_min = 45 # Середня додаткова затримка в обхід
+        delay_min = 45
+    else:
+        status_str = '🟢 Вільно'
+        if api_key and pd.notna(lat) and pd.notna(lon):
+            try:
+                orig_lat = float(lat) - 0.008
+                orig_lon = float(lon) - 0.008
+                url = (f"https://maps.googleapis.com/maps/api/distancematrix/json?"
+                       f"origins={orig_lat},{orig_lon}&destinations={lat},{lon}"
+                       f"&departure_time=now&key={api_key}")
+                res = requests.get(url, timeout=4).json()
+                if res.get('status') == 'OK':
+                    element = res.get('rows', [{}])[0].get('elements', [{}])[0]
+                    if element.get('status') == 'OK':
+                        dist_m = element.get('distance', {}).get('value', 1000)
+                        dur_norm = element.get('duration', {}).get('value', 60)
+                        dur_traf = element.get('duration_in_traffic', {}).get('value', dur_norm)
+                        speed_kmh = round((dist_m / 1000.0) / (dur_traf / 3600.0))
+                        speed_kmh = max(5, min(speed_kmh, 110))
+                        delay_min = round(max(0, dur_traf - dur_norm) / 60)
+                        
+                        if dur_traf > dur_norm * 1.4 or speed_kmh < 25:
+                            status_str = '🟡 Ускладнено / Затор'
+                        else:
+                            status_str = '🟢 Вільно'
+            except Exception:
+                status_str = '🟢 Штатно'
+        else:
+            speed_kmh = 55
+            status_str = '🟢 Штатний режим'
 
     bridge_cards_data.append({
-        "ID": b_id,
-        "Переправa": b_name,
-        "Вузол/Регіон": b_region,
-        "Статус": status_str,
-        "Швидкість": f"{speed_kmh} км/год" if is_working else "—",
-        "Затримка": f"+{delay_min} хв",
-        "Координати": f"{lat}, {lon}"
+        "id": b_id,
+        "name": b_name,
+        "region": b_region,
+        "state": status_str,
+        "speed": speed_kmh,
+        "delay": delay_min,
+        "timestamp": timestamp
     })
 
-df_bridges_view = pd.DataFrame(bridge_cards_data)
-st.dataframe(df_bridges_view, use_container_width=True)
+# Вивід метрик (карток) по мостах
+st.markdown("### 📊 Статус та швидкість на переправах")
+for i in range(0, len(bridge_cards_data), 4):
+    cols = st.columns(4)
+    for j, data in enumerate(bridge_cards_data[i:i+4]):
+        with cols[j]:
+            st.metric(
+                label=f"{data['name']} ({data['region']})",
+                value=f"{data['speed']} км/год",
+                delta=f"{data['state']} (+{data['delay']} хв)"
+            )
 
 st.markdown("---")
-st.subheader("⚠️ Аналіз впливу закритих переходів на дистрибуцію та РЦ/ТТ")
 
-closed_bridges = [b['Переправa'] for b in bridge_cards_data if "Закритий" in b['Статус']]
-if closed_bridges:
-    st.error(f"🚨 Увага! Зафіксовано закриття наступних критичних переходів: **{', '.join(closed_bridges)}**. Модель автоматично активує резервні маршрути згідно з матрицею варіантів обходу.")
+# Аналіз впливу закритих переходів
+closed_count = sum(1 for d in bridge_cards_data if "Закритий" in d['state'])
+congested_count = sum(1 for d in bridge_cards_data if "Ускладнено" in d['state'])
+
+col_inf1, col_inf2 = st.columns(2)
+with col_inf1:
+    st.metric("🚨 Закриті переправи", f"{closed_count} об'єктів")
+with col_inf2:
+    st.metric("🟡 Об'єкти із заторами", f"{congested_count} об'єктів")
+
+if closed_count > 0:
+    st.warning("⚠️ Увага! Закриття переправ призводить до перенаправлення магістральних потоків на альтернативні маршрути та збільшення часу доставки.")
 else:
-    st.success("✅ Усі ключові переправи функціонують у штатному режимі. Доставка йде за базовими маршрутами.")
+    st.success("✅ Усі переправи функціонують у штатному режимі. Доставка йде за графіком.")
 
-# Довідкова інформація по РЦ
 st.markdown("---")
-st.subheader("🏢 Довідник активних розподільчих центрів (РЦ)")
-st.dataframe(rc_df, use_container_width=True)
+st.subheader("📋 Детальна таблиця мостів та параметрів трафіку")
+df_table = pd.DataFrame(bridge_cards_data)
+st.dataframe(df_table, use_container_width=True)
