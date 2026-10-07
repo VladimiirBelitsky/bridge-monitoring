@@ -1,5 +1,6 @@
 streamlit
 pandas
-requests
-plotly
 openpyxl
+plotly
+requests
+beautifulsoup4
