@@ -5,12 +5,16 @@ import pandas as pd
 import random
 import os
 import time
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(
     page_title="Оперативний моніторинг мостів та переправ України",
     page_icon="🌉",
     layout="wide"
 )
+
+# Автоматичне оновлення сторінки раз на 30 хвилин
+st_autorefresh(interval=30 * 60 * 1000, key="datarefresh")
 
 KYIV_TZ = timezone(timedelta(hours=3))
 HISTORY_FILE = "traffic_history.csv"
@@ -113,14 +117,13 @@ def fetch_hybrid_telemetry(api_key):
                             speed_kmh = max(10, min(calc_speed, 110))
                             api_success_count += 1
                 
-                time.sleep(0.12) # Плавна пауза проти лімітів Google
+                time.sleep(0.12)
             except Exception:
                 pass
 
         if speed_kmh is None:
             speed_kmh = random.choice([32, 42, 50, 58, 65, 75])
 
-        # Адекватні пороги заторів
         if speed_kmh < 20:
             status_str = '🔴 Критично / Затор'
         elif speed_kmh < 32:
@@ -171,7 +174,7 @@ with tab_live:
             traffic_data = st.session_state['cached_live']
 
     with col_info:
-        st.info(f"Поточний час Києва: {get_kyiv_now().strftime('%Y-%m-%d %H:%M:%S')} (Логування в CSV активне)")
+        st.info(f"Поточний час Києва: {get_kyiv_now().strftime('%Y-%m-%d %H:%M:%S')} (Автооновлення: кожні 30 хв)")
 
     traffic_data = st.session_state.get('cached_live', {})
     if traffic_data:
