@@ -102,46 +102,55 @@ def fetch_routes_api_telemetry(api_key):
     for b_id, b_info in BRIDGES.items():
         speed_str = "Н/Д"
         status_str = "❌ Немає зв'язку з API"
+        success = False
         
-        try:
-            payload = {
-                "origin": {"location": {"latLng": {"latitude": b_info['start_lat'], "longitude": b_info['start_lon']}}},
-                "destination": {"location": {"latLng": {"latitude": b_info['end_lat'], "longitude": b_info['end_lon']}}},
-                "travelMode": "DRIVE",
-                "routingPreference": "TRAFFIC_AWARE"
-            }
-            res = requests.post(url, json=payload, headers=headers, timeout=8).json()
-            
-            if 'routes' in res and len(res['routes']) > 0:
-                route = res['routes'][0]
-                dist_m = route.get('distanceMeters', 0)
-                dur_str = str(route.get('duration', '0s')).replace('s', '')
-                dur_sec = float(dur_str) if dur_str else 0.0
+        # Механізм повторних спроб (до 3 разів) при отриманні помилки 429
+        for attempt in range(3):
+            try:
+                payload = {
+                    "origin": {"location": {"latLng": {"latitude": b_info['start_lat'], "longitude": b_info['start_lon']}}},
+                    "destination": {"location": {"latLng": {"latitude": b_info['end_lat'], "longitude": b_info['end_lon']}}},
+                    "travelMode": "DRIVE",
+                    "routingPreference": "TRAFFIC_AWARE"
+                }
+                res = requests.post(url, json=payload, headers=headers, timeout=8).json()
                 
-                if dist_m > 0 and dur_sec > 0:
-                    dist_km = dist_m / 1000.0
-                    hours = dur_sec / 3600.0
-                    calc_speed = round(dist_km / hours)
+                if 'routes' in res and len(res['routes']) > 0:
+                    route = res['routes'][0]
+                    dist_m = route.get('distanceMeters', 0)
+                    dur_str = str(route.get('duration', '0s')).replace('s', '')
+                    dur_sec = float(dur_str) if dur_str else 0.0
                     
-                    speed_str = f"{calc_speed} км/год"
-                    if calc_speed < 20:
-                        status_str = '🔴 Критично / Затор (Live)'
-                    elif calc_speed < 35:
-                        status_str = '🟡 Повільний рух (Live)'
+                    if dist_m > 0 and dur_sec > 0:
+                        dist_km = dist_m / 1000.0
+                        hours = dur_sec / 3600.0
+                        calc_speed = round(dist_km / hours)
+                        
+                        speed_str = f"{calc_speed} км/год"
+                        if calc_speed < 20:
+                            status_str = '🔴 Критично / Затор (Live)'
+                        elif calc_speed < 35:
+                            status_str = '🟡 Повільний рух (Live)'
+                        else:
+                            status_str = '🟢 Вільно (Live)'
+                        success = True
+                        break
+                elif 'error' in res:
+                    err_code = res['error'].get('code', 'Unknown')
+                    if err_code == 429:
+                        status_str = "❌ Ліміт запитів (429), повторюємо..."
+                        time.sleep(3.0 * (attempt + 1)) # Збільшуємо паузу з кожною спробою
+                        continue
                     else:
-                        status_str = '🟢 Вільно (Live)'
-            elif 'error' in res:
-                err_code = res['error'].get('code', 'Unknown')
-                err_msg = res['error'].get('message', 'Помилка')
-                if err_code == 429:
-                    status_str = "❌ Помилка 429: Перевірте Billing в Google Cloud"
-                else:
-                    status_str = f"❌ API Error {err_code}"
-            
-            # Збільшуємо затримку до 1 секунди між запитами для безпеки лімітів
-            time.sleep(1.0)
-        except Exception:
-            status_str = "❌ Помилка мережі"
+                        status_str = f"❌ API Error {err_code}"
+                        break
+                break
+            except Exception:
+                status_str = "❌ Помилка мережі"
+                time.sleep(1.5)
+
+        # Безпечна пауза між містами (збільшено до 1.2 сек для стабільності)
+        time.sleep(1.2)
 
         record = {
             'timestamp': timestamp_str, 'id': b_id, 'name': b_info['name'],
@@ -156,7 +165,7 @@ def fetch_routes_api_telemetry(api_key):
 
 # --- Інтерфейс ---
 st.title("🌉 Оперативний моніторинг мостів та переправ України")
-st.markdown("Строгий контроль трафіку на основі **сучасного Routes API v2 (реальні дані з урахуванням заторів)**.")
+st.markdown("Строгий контроль трафіку на основі **сучасного Routes API v2 з системою авто-повторів**.")
 
 st.sidebar.header("⚙️ Конфігурація доступу")
 manual_key_input = st.sidebar.text_input("Routes API Key (якщо треба перевизначити):", type="password", value="")
@@ -169,7 +178,6 @@ else:
 
 tab_live, tab_history = st.tabs(["📊 Оперативна панель (Live)", "📈 Архів та історія"])
 
-# Ініціалізація сесії для запобігання зайвим запитам
 if 'cached_live' not in st.session_state:
     st.session_state['cached_live'] = {}
 
@@ -177,7 +185,7 @@ with tab_live:
     col_btn1, col_info = st.columns([1, 2])
     with col_btn1:
         if st.button("🔄 Оновити зріз з Google Maps"):
-            with st.spinner("Збираємо телеметрію по 16 вузлах (це займе близько 15 секунд)..."):
+            with st.spinner("Збираємо телеметрію по 16 вузлах із захистом від лімітів..."):
                 st.session_state['cached_live'] = fetch_routes_api_telemetry(resolved_key)
             st.success("Дані успішно оновлено!")
         else:
