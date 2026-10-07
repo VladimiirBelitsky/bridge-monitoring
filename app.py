@@ -13,7 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Автоматичне оновлення сторінки раз на 30 хвилин (30 хв * 60 сек * 1000 мс)
+# Автоматичне оновлення сторінки раз на 30 хвилин
 st_autorefresh(interval=30 * 60 * 1000, key="datarefresh")
 
 KYIV_TZ = timezone(timedelta(hours=3))
@@ -43,15 +43,17 @@ def get_kyiv_now():
     return datetime.now(KYIV_TZ)
 
 def get_active_api_key(manual_input=""):
-    if manual_input.strip():
+    if manual_input and manual_input.strip():
         return manual_input.strip()
     try:
-        if "google_maps" in st.secrets:
-            gm = st.secrets["google_maps"]
-            if isinstance(gm, dict) and "api_key" in gm:
-                return gm["api_key"]
+        if "google_maps" in st.secrets and "api_key" in st.secrets["google_maps"]:
+            key = st.secrets["google_maps"]["api_key"]
+            if key:
+                return key.strip()
         if "api_key" in st.secrets:
-            return st.secrets["api_key"]
+            key = st.secrets["api_key"]
+            if key:
+                return key.strip()
     except Exception:
         pass
     return ""
@@ -152,20 +154,20 @@ st.title("🌉 Оперативний моніторинг мостів та п�
 st.markdown("Продакшн-система контролю трафіку з інтеграцією **Google Routes API** та довгостроковим архівом телеметрії.")
 
 st.sidebar.header("⚙️ Конфігурація доступу")
-manual_key_input = st.sidebar.text_input("Routes API Key:", type="password", value="")
+manual_key_input = st.sidebar.text_input("Routes API Key (якщо треба перевизначити):", type="password", value="")
 resolved_key = get_active_api_key(manual_key_input)
 
 if resolved_key:
-    st.sidebar.success("✅ Ключ активний в системі")
+    st.sidebar.success("✅ Ключ успішно підхоплено (Live API активне)")
 else:
-    st.sidebar.warning("⚠️ Автономний режим активний")
+    st.sidebar.warning("⚠️ Автономний режим активний (ключ не знайдено)")
 
 tab_live, tab_history = st.tabs(["📊 Оперативна панель (Live)", "📈 Архів та історія (за місяць)"])
 
 with tab_live:
     col_btn1, col_info = st.columns([1, 2])
     with col_btn1:
-        if st.button("🔄 Оновити та зберегти зріз зараз"):
+        if st.button("🔄 Оновити та зберегти зріз"):
             st.session_state['cached_live'] = fetch_hybrid_telemetry(resolved_key)
             st.success("Дані оновлено та занесено в архів!")
         else:
@@ -235,4 +237,4 @@ with tab_history:
             mime="text/csv"
         )
     else:
-        st.info("Архів поки порожній. Натисніть кнопку «Оновити та зберегти зріз зараз» на першій вкладці, щоб накопичити перші дані.")
+        st.info("Архів поки порожній. Натисніть кнопку «Оновити та зберегти зріз» на першій вкладці, щоб накопичити перші дані.")
