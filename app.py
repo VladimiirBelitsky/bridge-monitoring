@@ -165,7 +165,7 @@ def fetch_routes_api_telemetry(api_key):
 
 # --- Інтерфейс ---
 st.title("🌉 Оперативний моніторинг мостів та переправ України")
-st.markdown("Строгий контроль трафіку на основі **сучасного Routes API v2 з системою авто-повторів**.")
+st.markdown("Контроль трафіку на основі **сучасного Routes API**.")
 
 st.sidebar.header("⚙️ Конфігурація доступу")
 manual_key_input = st.sidebar.text_input("Routes API Key (якщо треба перевизначити):", type="password", value="")
