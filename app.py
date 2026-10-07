@@ -77,10 +77,6 @@ def load_history_csv():
     return pd.DataFrame(columns=['timestamp', 'id', 'name', 'region', 'state', 'speed', 'source_name', 'source_url'])
 
 def fetch_routes_api_telemetry(api_key):
-    """
-    Використовує сучасний Routes API v2 із затримкою між запитами, 
-    щоб уникнути ліміту 429 і задовольняти вимоги безпеки Google Cloud.
-    """
     now = get_kyiv_now()
     timestamp_str = now.strftime('%Y-%m-%d %H:%M:%S')
     traffic_dict = {}
@@ -137,12 +133,13 @@ def fetch_routes_api_telemetry(api_key):
             elif 'error' in res:
                 err_code = res['error'].get('code', 'Unknown')
                 err_msg = res['error'].get('message', 'Помилка')
-                status_str = f"❌ API Error {err_code}"
                 if err_code == 429:
-                    time.sleep(2) # Додаткова пауза при ліміті
+                    status_str = "❌ Помилка 429: Перевірте Billing в Google Cloud"
+                else:
+                    status_str = f"❌ API Error {err_code}"
             
-            # Робимо безпечну паузу в 0.8 секунди між кожним запитом до Routes API
-            time.sleep(0.8)
+            # Збільшуємо затримку до 1 секунди між запитами для безпеки лімітів
+            time.sleep(1.0)
         except Exception:
             status_str = "❌ Помилка мережі"
 
@@ -172,22 +169,26 @@ else:
 
 tab_live, tab_history = st.tabs(["📊 Оперативна панель (Live)", "📈 Архів та історія"])
 
+# Ініціалізація сесії для запобігання зайвим запитам
+if 'cached_live' not in st.session_state:
+    st.session_state['cached_live'] = {}
+
 with tab_live:
     col_btn1, col_info = st.columns([1, 2])
     with col_btn1:
         if st.button("🔄 Оновити зріз з Google Maps"):
-            with st.spinner("Збираємо телеметрію по 16 вузлах через Routes API..."):
+            with st.spinner("Збираємо телеметрію по 16 вузлах (це займе близько 15 секунд)..."):
                 st.session_state['cached_live'] = fetch_routes_api_telemetry(resolved_key)
             st.success("Дані успішно оновлено!")
         else:
-            if 'cached_live' not in st.session_state:
+            if not st.session_state['cached_live']:
                 with st.spinner("Завантаження початкових даних..."):
                     st.session_state['cached_live'] = fetch_routes_api_telemetry(resolved_key)
 
     with col_info:
         st.info(f"Поточний час Києва: {get_kyiv_now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    traffic_data = st.session_state.get('cached_live', {})
+    traffic_data = st.session_state['cached_live']
     if traffic_data:
         st.markdown("### 📊 Поточний стан мостової мережі (Live)")
         batch_items = list(traffic_data.items())
