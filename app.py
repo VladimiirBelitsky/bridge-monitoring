@@ -33,19 +33,18 @@ def fetch_logistics_telemetry():
     traffic_dict = {}
     timestamp = get_kyiv_now_str()
     
-    # Жорстке зчитування ключа
     api_key = ""
     try:
         api_key = st.secrets["google_maps"]["api_key"]
     except Exception as e:
-        st.error(f"⚠️ Помилка читання st.secrets для Google Maps: {e}")
+        st.error(f"Помилка читання st.secrets для Google Maps: {e}")
     
     for p_id, p_info in LOGISTIC_POINTS.items():
         if p_id == 'RC_KYIV':
             traffic_dict[p_id] = {
                 'name': p_info['name'],
                 'region': p_info['region'],
-                'state': '🟢 Головний хаб (Активний)',
+                'state': 'Головний хаб (Активний)',
                 'speed': 0,
                 'source': 'Базовий вузол РЦ',
                 'timestamp': timestamp,
@@ -55,8 +54,8 @@ def fetch_logistics_telemetry():
             continue
             
         speed_kmh = 50
-        status_str = '🟡 Очікування даних'
-        source_desc = 'Немає з'єднання'
+        status_str = 'Очікування даних'
+        source_desc = 'Немає зєднання'
         
         try:
             if api_key:
@@ -81,28 +80,27 @@ def fetch_logistics_telemetry():
                         distance_km = distance_meters / 1000.0
                         hours_in_traffic = dur_traf / 3600.0
                         
-                        # Розрахунок швидкості потоку за формулою distance / hours_in_traffic
                         speed_kmh = round(distance_km / hours_in_traffic) if hours_in_traffic > 0 else 50
                         speed_kmh = max(10, min(speed_kmh, 120))
                         
                         if dur_traf > dur_norm * 1.3 or speed_kmh < 35:
-                            status_str = '🟡 Повільний рух / Затор'
+                            status_str = 'Повільний рух / Затор'
                         else:
-                            status_str = '🟢 Норма (Графік дотримано)'
+                            status_str = 'Норма (Графік дотримано)'
                             
                         source_desc = "Google Maps API (Live Telemetry)"
                     else:
-                        status_str = '🔴 Помилка елемента API'
+                        status_str = 'Помилка елемента API'
                         source_desc = element.get('status', 'Unknown')
                 else:
-                    status_str = '🔴 Помилка API статусу'
+                    status_str = 'Помилка API статусу'
                     source_desc = res.get('status', 'Unknown')
             else:
-                status_str = '🔴 Відсутній API ключ'
+                status_str = 'Відсутній API ключ'
                 source_desc = 'Перевірте secrets.toml'
                 
         except Exception as err:
-            status_str = '🔴 Помилка зв\'язку'
+            status_str = 'Помилка звʼязку'
             source_desc = str(err)
 
         traffic_dict[p_id] = {
@@ -119,18 +117,17 @@ def fetch_logistics_telemetry():
     return traffic_dict
 
 # --- Інтерфейс Streamlit ---
-st.title("🚚 Оперативний моніторинг ланцюгів РЦ та ТТ")
+st.title("Оперативний моніторинг ланцюгів РЦ та ТТ")
 st.markdown("Панель контролю транспортних потоків, швидкості доставки та розрахунку плеча між розподільчими центрами й точками на базі Google Maps API.")
 
 col_btn1, col_btn2 = st.columns([1, 4])
 with col_btn1:
-    if st.button("🔄 Оновити телеметрію"):
+    if st.button("Оновити телеметрію"):
         st.rerun()
 
 logistics_data = fetch_logistics_telemetry()
 
-# Метрики по ключових вузлах (пропускаємо головний РЦ у сітці швидкостей)
-st.markdown("### 📊 Статус магістральних напрямків від РЦ")
+st.markdown("### Статус магістральних напрямків від РЦ")
 non_rc_items = [(k, v) for k, v in logistics_data.items() if k != 'RC_KYIV']
 for i in range(0, len(non_rc_items), 4):
     cols = st.columns(4)
@@ -144,8 +141,7 @@ for i in range(0, len(non_rc_items), 4):
 
 st.markdown("---")
 
-# --- ПЛАНУВАЛЬНИК МАРШРУТІВ МІЖ РЦ ТА ТТ ---
-st.subheader("🗺️ Розрахунок логістичного плеча (РЦ ➡️ ТТ)")
+st.subheader("Розрахунок логістичного плеча (РЦ ➡️ ТТ)")
 st.markdown("Оберіть початковий вузол (РЦ / склад) та пункт призначення (Торгова точка) для точного розрахунку відстані та часу в дорозі.")
 
 r_col1, r_col2, r_col3 = st.columns([2, 2, 1])
@@ -153,12 +149,12 @@ r_col1, r_col2, r_col3 = st.columns([2, 2, 1])
 point_options = {p_id: data['name'] for p_id, data in logistics_data.items()}
 
 with r_col1:
-    origin_point = st.selectbox("📍 Відправлення (РЦ / Вузол)", list(point_options.keys()), format_func=lambda x: point_options[x], index=0)
+    origin_point = st.selectbox("Відправлення (РЦ / Вузол)", list(point_options.keys()), format_func=lambda x: point_options[x], index=0)
 with r_col2:
-    dest_point = st.selectbox("🎯 Призначення (Торгова точка)", list(point_options.keys()), format_func=lambda x: point_options[x], index=min(2, len(point_options)-1))
+    dest_point = st.selectbox("Призначення (Торгова точка)", list(point_options.keys()), format_func=lambda x: point_options[x], index=min(2, len(point_options)-1))
 with r_col3:
     st.write("")
-    calc_route = st.button("🚀 Розрахувати плече", use_container_width=True)
+    calc_route = st.button("Розрахувати плече", use_container_width=True)
 
 if calc_route:
     orig_coords = f"{logistics_data[origin_point]['lat']},{logistics_data[origin_point]['lon']}"
@@ -185,23 +181,23 @@ if calc_route:
                     dur_txt = el_m.get('duration', {}).get('text', 'Н/Д')
                     dur_traf_txt = el_m.get('duration_in_traffic', {}).get('text', dur_txt)
                     
-                    st.success(f"✅ Маршрут успішно побудовано: **{logistics_data[origin_point]['name']}** ➡️ **{logistics_data[dest_point]['name']}**")
+                    st.success(f"Маршрут успішно побудовано: **{logistics_data[origin_point]['name']}** ➡️ **{logistics_data[dest_point]['name']}**")
                     mc1, mc2, mc3 = st.columns(3)
-                    mc1.metric("📏 Відстань маршруту", dist_txt)
-                    mc2.metric("⏱️ Нормативний час", dur_txt)
-                    mc3.metric("🚗 Час з урахуванням трафіку", dur_traf_txt)
+                    mc1.metric("Відстань маршруту", dist_txt)
+                    mc2.metric("Нормативний час", dur_txt)
+                    mc3.metric("Час з урахуванням трафіку", dur_traf_txt)
                     success_calc = True
         except Exception as e:
             st.error(f"Помилка розрахунку маршруту: {e}")
             
     if not success_calc:
         if origin_point == dest_point:
-            st.warning("⚠️ Пункт відправлення і призначення не можуть збігатися.")
+            st.warning("Пункт відправлення і призначення не можуть збігатися.")
         else:
-            st.error("❌ Не вдалося отримати дані від Google Maps API для цього плеча. Перевірте статус ключа утиліти.")
+            st.error("Не вдалося отримати дані від Google Maps API для цього плеча.")
 
 st.markdown("---")
-st.subheader("📋 Реєстр активних вузлів розподілу (РЦ та ТТ)")
+st.subheader("Реєстр активних вузлів розподілу (РЦ та ТТ)")
 
 table_rows = []
 for p_id, data in logistics_data.items():
