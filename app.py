@@ -89,15 +89,15 @@ def fetch_public_telegram_news():
     closed_dict = {}
     logs = []
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         response = requests.get("https://t.me/s/kyivoperativny", headers=headers, timeout=4)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
             text_content = soup.get_text().lower()
             if "південний міст" in text_content and ("перекрито" in text_content or "заблоковано" in text_content):
                 closed_dict['KYI_SOUTH'] = True
-                logs.append(f"[{get_kyiv_now_str()}] 🚨 [Автоматика Telegram] Знайдено згадку про перекриття Південного мосту у стрічці новин.")
-    except Exception as e:
+                logs.append(f"[{get_kyiv_now_str()}] 🚨 [Telegram Parser] Знайдено згадку про перекриття Південного мосту.")
+    except Exception:
         logs.append(f"[{get_kyiv_now_str()}] ℹ️ [Telegram Parser] Використано резервний моніторинг стрічок.")
         
     return closed_dict, logs
@@ -229,7 +229,7 @@ def recalculate_network_dynamic(df_options, bridge_status_dict):
 st.title("🌁 Автоматизований операційний моніторинг мостів та мережі")
 
 if 'sync_logs' not in st.session_state:
-    st.session_state['sync_logs'] = [f"[{get_kyiv_now_str()}] Система запущена в повністю автономному режимі (Telegram + Maps)."]
+    st.session_state['sync_logs'] = [f"[{get_kyiv_now_str()}] Система запущена з підключеними бібліотеками (Requests + BeautifulSoup)."]
 
 try:
     df_options = load_excel_model(EXCEL_FILE)
@@ -343,6 +343,6 @@ with tab3:
 
 with tab4:
     st.subheader("🔍 Лог автоматичних каналів та верифікація джерел")
-    st.info("ℹ️ Система автоматично сканує публічні стрічки та дані швидкості з карток при кожному натисканні кнопки оновлення.")
+    st.info("ℹ️ Система автоматично сканує публічні стрічки та дані швидкості з карток.")
     for log in st.session_state['sync_logs']:
         st.warning(log)
