@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
-from datetime import datetime
-import pytz
+from datetime import datetime, timezone, timedelta
 import random
 
 # Налаштування сторінки
@@ -10,6 +9,8 @@ st.set_page_config(
     page_icon="🌉",
     layout="wide"
 )
+
+KYIV_TZ = timezone(timedelta(hours=3))
 
 # Список переправ / мостів (координати та регіони)
 BRIDGES = {
@@ -20,8 +21,7 @@ BRIDGES = {
 }
 
 def get_kyiv_now_str():
-    kyiv_tz = pytz.timezone('Europe/Kyiv')
-    return datetime.now(kyiv_tz).strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.now(KYIV_TZ).strftime('%Y-%m-%d %H:%M:%S')
 
 def fetch_google_maps_traffic_and_sources():
     traffic_dict = {}
@@ -37,7 +37,6 @@ def fetch_google_maps_traffic_and_sources():
     for b_id, b_info in BRIDGES.items():
         try:
             if api_key:
-                # Формуємо короткий відрізок для розрахунку швидкості потоку через Distance Matrix API
                 orig_lat = b_info['lat'] - 0.008
                 orig_lon = b_info['lon'] - 0.008
                 dest_lat = b_info['lat']
@@ -95,14 +94,11 @@ def fetch_google_maps_traffic_and_sources():
 st.title("🌉 Оперативний моніторинг переправ та логістики")
 st.markdown("Панель контролю транспортних потоків у реальному часі.")
 
-# Кнопка оновлення даних
 if st.button("🔄 Оновити дані потоку"):
     st.rerun()
 
-# Отримуємо дані
 traffic_data, session_logs = fetch_google_maps_traffic_and_sources()
 
-# Виводимо метрики у колонках
 col1, col2, col3, col4 = st.columns(4)
 cols = [col1, col2, col3, col4]
 
@@ -117,7 +113,6 @@ for i, (b_id, data) in enumerate(traffic_data.items()):
 st.markdown("---")
 st.subheader("📊 Детальна таблиця станів та джерел телеметрії")
 
-# Формуємо таблицю для відображення
 table_rows = []
 for b_id, data in traffic_data.items():
     table_rows.append({
