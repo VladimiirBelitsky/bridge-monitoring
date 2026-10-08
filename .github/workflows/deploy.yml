@@ -1,9 +1,9 @@
 name: Traffic Monitor
+
 on:
   workflow_dispatch:
-
-permissions:
-  contents: write
+  schedule:
+    - cron: '*/30 * * * *' # Запуск кожні 30 хвилин
 
 jobs:
   run-traffic:
@@ -32,5 +32,6 @@ jobs:
         run: |
           git config --global user.name "GitHub Action Bot"
           git config --global user.email "action@github.com"
-          git add bridge_history.csv
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update bridge history [skip ci]" && git push)
+          git add traffic_history.csv
+          git commit -m "Auto-update traffic history [skip ci]" || echo "No changes to commit"
+          git push
