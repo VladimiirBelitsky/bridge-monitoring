@@ -2,6 +2,9 @@ name: Traffic Monitor
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   run-traffic:
     runs-on: ubuntu-latest
