@@ -49,13 +49,15 @@ def main():
 
     for idx, row in df_excel.iterrows():
         try:
-            # Використовуємо безпечне отримання за індексами або назвами
-            bridge_id = str(row.iloc[0])
-            name = str(row.iloc[1])
-            lat1 = float(row.iloc[2])
-            lon1 = float(row.iloc[3])
-            lat2 = float(row.iloc[4])
-            lon2 = float(row.iloc[5])
+            vals = list(row.values)
+            if len(vals) < 6:
+                continue
+            bridge_id = str(vals[0])
+            name = str(vals[1])
+            lat1 = float(vals[2])
+            lon1 = float(vals[3])
+            lat2 = float(vals[4])
+            lon2 = float(vals[5])
 
             speed = get_route_speed(lat1, lon1, lat2, lon2)
             if speed is not None:
@@ -66,7 +68,7 @@ def main():
                     "speed": speed
                 })
         except Exception as row_err:
-            print(f"Помилка в рядку {idx}: {row_err}")
+            print(f"Пропущено рядок {idx}: {row_err}")
 
     if new_records:
         history_file = "bridge_history.csv"
@@ -81,7 +83,7 @@ def main():
         df_history.to_csv(history_file, index=False)
         print(f"Успішно збережено {len(new_records)} записів у {history_file}")
     else:
-        print("Жодного запису не було додано.")
+        print("Жодного запису не додано.")
 
 if __name__ == "__main__":
     main()
