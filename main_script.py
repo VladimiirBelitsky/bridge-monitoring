@@ -1,3 +1,4 @@
+print("🔥 ЦЕЙ КОД ОНОВЛЕНО І ЗАПУЩЕНО УСПІШНО!")
 import os
 from datetime import datetime, timezone, timedelta
 import pandas as pd
