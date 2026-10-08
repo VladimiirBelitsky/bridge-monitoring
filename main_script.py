@@ -7,6 +7,7 @@ import time
 KYIV_TZ = timezone(timedelta(hours=3))
 HISTORY_FILE = "traffic_history.csv"
 
+# Реєстр 16 критичних вузлів (ідентичний до app.py)
 BRIDGES = {
     'KYI_SOUTH': {'name': 'Південний міст', 'region': 'Київ', 'start_lat': 50.3850, 'start_lon': 30.5750, 'end_lat': 50.3950, 'end_lon': 30.5950, 'source_name': 'Патрульна поліція Києва', 'source_url': 'https://t.me/patrolpolice_kyiv'},
     'KYI_DARN': {'name': 'Дарницький міст', 'region': 'Київ', 'start_lat': 50.4120, 'start_lon': 30.5850, 'end_lat': 50.4250, 'end_lon': 30.6000, 'source_name': 'КМДА', 'source_url': 'https://t.me/kyivcityofficial'},
@@ -37,6 +38,7 @@ def main():
 
     now = get_kyiv_now()
     timestamp_str = now.strftime('%Y-%m-%d %H:%M:%S')
+    
     headers = {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': api_key,
