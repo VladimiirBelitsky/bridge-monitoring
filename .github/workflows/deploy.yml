@@ -32,6 +32,6 @@ jobs:
         run: |
           git config --global user.name "GitHub Action Bot"
           git config --global user.email "action@github.com"
-          git add traffic_history.csv
+          git add bridges_traffic_log.csv
           git commit -m "Auto-update traffic history [skip ci]" || echo "No changes to commit"
           git push
