@@ -6,7 +6,7 @@ from datetime import datetime
 API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY")
 
 def main():
-    excel_filename = "Робоча_модель_мережі_ФІНАЛ 1.xlsx"
+    excel_filename = "network_model.xlsx"
     if not os.path.exists(excel_filename):
         print("Excel файл не знайдено!")
         return
