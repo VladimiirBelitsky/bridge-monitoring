@@ -1,4 +1,4 @@
-print("🔥 ЦЕЙ КОД ОНОВЛЕНО І ЗАПУЩЕНО УСПІШНО!")
+print("ЗАПУСК НОВОГО СКРИПТА МОСТІВ ПОЧАТОВ")
 import os
 from datetime import datetime, timezone, timedelta
 import pandas as pd
