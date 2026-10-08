@@ -7,7 +7,6 @@ import time
 KYIV_TZ = timezone(timedelta(hours=3))
 HISTORY_FILE = "traffic_history.csv"
 
-# Реєстр 16 критичних вузлів (ідентичний до app.py)
 BRIDGES = {
     'KYI_SOUTH': {'name': 'Південний міст', 'region': 'Київ', 'start_lat': 50.3850, 'start_lon': 30.5750, 'end_lat': 50.3950, 'end_lon': 30.5950, 'source_name': 'Патрульна поліція Києва', 'source_url': 'https://t.me/patrolpolice_kyiv'},
     'KYI_DARN': {'name': 'Дарницький міст', 'region': 'Київ', 'start_lat': 50.4120, 'start_lon': 30.5850, 'end_lat': 50.4250, 'end_lon': 30.6000, 'source_name': 'КМДА', 'source_url': 'https://t.me/kyivcityofficial'},
@@ -27,18 +26,15 @@ BRIDGES = {
     'ZP_NEW': {'name': 'Нові мости (Запоріжжя)', 'region': 'Запоріжжя', 'start_lat': 47.8550, 'start_lon': 35.0850, 'end_lat': 47.8750, 'end_lon': 35.1150, 'source_name': 'Запорізька ОВА', 'source_url': 'https://t.me/zoda_gov_ua'}
 }
 
-def get_kyiv_now():
-    return datetime.now(timezone.utc) + timedelta(hours=3)
-
 def main():
     api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
     if not api_key:
-        print("❌ Помилка: Не знайдено GOOGLE_MAPS_API_KEY у середовищі.")
+        print("❌ ПОМИЛКА: Ключ GOOGLE_MAPS_API_KEY пустий або не передався у середовище!")
         return
+    else:
+        print(f"✅ Ключ успішно зчитано (довжина: {len(api_key)} символів)")
 
-    now = get_kyiv_now()
-    timestamp_str = now.strftime('%Y-%m-%d %H:%M:%S')
-    
+    timestamp_str = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=3))).strftime('%Y-%m-%d %H:%M:%S')
     headers = {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': api_key,
@@ -51,61 +47,45 @@ def main():
         speed_str = "Н/Д"
         status_str = "❌ Немає зв'язку з API"
         
-        for attempt in range(3):
-            try:
-                payload = {
-                    "origin": {"location": {"latLng": {"latitude": b_info['start_lat'], "longitude": b_info['start_lon']}}},
-                    "destination": {"location": {"latLng": {"latitude": b_info['end_lat'], "longitude": b_info['end_lon']}}},
-                    "travelMode": "DRIVE",
-                    "routingPreference": "TRAFFIC_AWARE"
-                }
-                res = requests.post(url, json=payload, headers=headers, timeout=8).json()
+        payload = {
+            "origin": {"location": {"latLng": {"latitude": b_info['start_lat'], "longitude": b_info['start_lon']}}},
+            "destination": {"location": {"latLng": {"latitude": b_info['end_lat'], "longitude": b_info['end_lon']}}},
+            "travelMode": "DRIVE",
+            "routingPreference": "TRAFFIC_AWARE"
+        }
+        
+        try:
+            res = requests.post(url, json=payload, headers=headers, timeout=10).json()
+            print(г:=f"Відповідь для {b_info['name']}: {res}")
+            
+            if 'routes' in res and len(res['routes']) > 0:
+                route = res['routes'][0]
+                dist_m = route.get('distanceMeters', 0)
+                dur_str = str(route.get('duration', '0s')).replace('s', '')
+                dur_sec = float(dur_str) if dur_str else 0.0
                 
-                if 'routes' in res and len(res['routes']) > 0:
-                    route = res['routes'][0]
-                    dist_m = route.get('distanceMeters', 0)
-                    dur_str = str(route.get('duration', '0s')).replace('s', '')
-                    dur_sec = float(dur_str) if dur_str else 0.0
-                    
-                    if dist_m > 0 and dur_sec > 0:
-                        dist_km = dist_m / 1000.0
-                        hours = dur_sec / 3600.0
-                        calc_speed = round(dist_km / hours)
-                        
-                        speed_str = f"{calc_speed} км/год"
-                        if calc_speed < 20:
-                            status_str = '🔴 Критично / Затор (Live)'
-                        elif calc_speed < 35:
-                            status_str = '🟡 Повільний рух (Live)'
-                        else:
-                            status_str = '🟢 Вільно (Live)'
-                        break
-                elif 'error' in res:
-                    err_code = res['error'].get('code', 'Unknown')
-                    if err_code == 429:
-                        time.sleep(3.0 * (attempt + 1))
-                        continue
-                    else:
-                        break
-                break
-            except Exception:
-                time.sleep(1.5)
+                if dist_m > 0 and dur_sec > 0:
+                    calc_speed = round((dist_m / 1000.0) / (dur_sec / 3600.0))
+                    speed_str = f"{calc_speed} км/год"
+                    status_str = '🔴 Критично / Затор (Live)' if calc_speed < 20 else ('🟡 Повільний рух (Live)' if calc_speed < 35 else '🟢 Вільно (Live)')
+            elif 'error' in res:
+                status_str = f"❌ API Error: {res['error'].get('message', 'Unknown')}"
+        except Exception as e:
+            status_str = f"❌ Помилка: {str(e)}"
 
-        time.sleep(1.2)
-        record = {
+        batch_records.append({
             'timestamp': timestamp_str, 'id': b_id, 'name': b_info['name'],
             'region': b_info['region'], 'state': status_str, 'speed': speed_str,
             'source_name': b_info['source_name'], 'source_url': b_info['source_url']
-        }
-        batch_records.append(record)
-        print(f"Оброблено: {b_info['name']} -> {speed_str} ({status_str})")
+        })
+        time.sleep(1.0)
 
     df_new = pd.DataFrame(batch_records)
     if os.path.exists(HISTORY_FILE):
         df_new.to_csv(HISTORY_FILE, mode='a', header=False, index=False, encoding='utf-8-sig')
     else:
         df_new.to_csv(HISTORY_FILE, index=False, encoding='utf-8-sig')
-    print(f"Успішно збережено {len(batch_records)} записів у {HISTORY_FILE}")
+    print(f"✅ Збережено {len(batch_records)} записів у {HISTORY_FILE}")
 
 if __name__ == "__main__":
     main()
