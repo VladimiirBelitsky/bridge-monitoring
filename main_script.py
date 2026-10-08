@@ -6,7 +6,7 @@ import requests
 import time
 
 KYIV_TZ = timezone(timedelta(hours=3))
-HISTORY_FILE = "traffic_history.csv"
+HISTORY_FILE = "bridges_traffic_log.csv"
 
 # Повний реєстр 16 критичних вузлів
 BRIDGES = {
