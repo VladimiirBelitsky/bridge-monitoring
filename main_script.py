@@ -1,12 +1,13 @@
 import os
-import requests
 from datetime import datetime, timezone, timedelta
 import pandas as pd
+import requests
 import time
 
 KYIV_TZ = timezone(timedelta(hours=3))
 HISTORY_FILE = "traffic_history.csv"
 
+# Повний реєстр 16 критичних вузлів
 BRIDGES = {
     'KYI_SOUTH': {'name': 'Південний міст', 'region': 'Київ', 'start_lat': 50.3850, 'start_lon': 30.5750, 'end_lat': 50.3950, 'end_lon': 30.5950, 'source_name': 'Патрульна поліція Києва', 'source_url': 'https://t.me/patrolpolice_kyiv'},
     'KYI_DARN': {'name': 'Дарницький міст', 'region': 'Київ', 'start_lat': 50.4120, 'start_lon': 30.5850, 'end_lat': 50.4250, 'end_lon': 30.6000, 'source_name': 'КМДА', 'source_url': 'https://t.me/kyivcityofficial'},
@@ -29,12 +30,13 @@ BRIDGES = {
 def main():
     api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
     if not api_key:
-        print("❌ ПОМИЛКА: Ключ GOOGLE_MAPS_API_KEY пустий або не передався у середовище!")
+        print("❌ ПОМИЛКА: Ключ GOOGLE_MAPS_API_KEY не знайдено в середовищі!")
         return
     else:
         print(f"✅ Ключ успішно зчитано (довжина: {len(api_key)} символів)")
 
-    timestamp_str = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=3))).strftime('%Y-%m-%d %H:%M:%S')
+    timestamp_str = datetime.now(timezone.utc).astimezone(KYIV_TZ).strftime('%Y-%m-%d %H:%M:%S')
+    
     headers = {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': api_key,
@@ -56,7 +58,6 @@ def main():
         
         try:
             res = requests.post(url, json=payload, headers=headers, timeout=10).json()
-            print(г:=f"Відповідь для {b_info['name']}: {res}")
             
             if 'routes' in res and len(res['routes']) > 0:
                 route = res['routes'][0]
@@ -65,19 +66,34 @@ def main():
                 dur_sec = float(dur_str) if dur_str else 0.0
                 
                 if dist_m > 0 and dur_sec > 0:
-                    calc_speed = round((dist_m / 1000.0) / (dur_sec / 3600.0))
+                    dist_km = dist_m / 1000.0
+                    hours = dur_sec / 3600.0
+                    calc_speed = round(dist_km / hours)
+                    
                     speed_str = f"{calc_speed} км/год"
-                    status_str = '🔴 Критично / Затор (Live)' if calc_speed < 20 else ('🟡 Повільний рух (Live)' if calc_speed < 35 else '🟢 Вільно (Live)')
+                    if calc_speed < 20:
+                        status_str = '🔴 Критично / Затор (Live)'
+                    elif calc_speed < 35:
+                        status_str = '🟡 Повільний рух (Live)'
+                    else:
+                        status_str = '🟢 Вільно (Live)'
+                print(f"Оброблено: {b_info['name']} -> {speed_str} ({status_str})")
             elif 'error' in res:
-                status_str = f"❌ API Error: {res['error'].get('message', 'Unknown')}"
+                err_msg = res['error'].get('message', 'Unknown error')
+                print(f"❌ Помилка для {b_info['name']}: {err_msg}")
+                status_str = f"❌ API Error: {err_msg}"
+            else:
+                print(f"❌ Неочікувана відповідь для {b_info['name']}: {res}")
         except Exception as e:
+            print(f"❌ Виняток для {b_info['name']}: {str(e)}")
             status_str = f"❌ Помилка: {str(e)}"
 
-        batch_records.append({
+        record = {
             'timestamp': timestamp_str, 'id': b_id, 'name': b_info['name'],
             'region': b_info['region'], 'state': status_str, 'speed': speed_str,
             'source_name': b_info['source_name'], 'source_url': b_info['source_url']
-        })
+        }
+        batch_records.append(record)
         time.sleep(1.0)
 
     df_new = pd.DataFrame(batch_records)
@@ -85,7 +101,8 @@ def main():
         df_new.to_csv(HISTORY_FILE, mode='a', header=False, index=False, encoding='utf-8-sig')
     else:
         df_new.to_csv(HISTORY_FILE, index=False, encoding='utf-8-sig')
-    print(f"✅ Збережено {len(batch_records)} записів у {HISTORY_FILE}")
+    
+    print(f"✅ Успішно збережено {len(batch_records)} записів у {HISTORY_FILE}")
 
 if __name__ == "__main__":
     main()
