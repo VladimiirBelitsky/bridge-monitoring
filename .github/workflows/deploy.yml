@@ -1,5 +1,5 @@
 name: Traffic Monitor
-
+# Активізація розкладу cron
 on:
   workflow_dispatch:
   schedule:
