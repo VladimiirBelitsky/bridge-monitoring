@@ -3,7 +3,7 @@ name: Traffic Monitor
 on:
   workflow_dispatch:
   schedule:
-    - cron: '*/30 * * * *' # Запуск кожні 30 хвилин
+    - cron: '0 */2 * * *' # Запуск кожні 2 години
 
 jobs:
   run-traffic:
