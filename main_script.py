@@ -33,8 +33,8 @@ BRIDGES = {
     },
     'KYI_METRO': {
         'name': 'Міст Метро', 'region': 'Київ', 
-        'start_lat': 50.4440, 'start_lon': 30.5580, 
-        'end_lat': 50.4490, 'end_lon': 30.5900, 
+        'start_lat': 50.441491, 'start_lon': 30.560397, 
+        'end_lat': 50.445658, 'end_lon': 30.575147, 
         'baseline_km': 2.6,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
