@@ -8,24 +8,120 @@ import time
 KYIV_TZ = timezone(timedelta(hours=3))
 HISTORY_FILE = "bridges_traffic_log.csv"
 
-# Повний реєстр 16 критичних вузлів
+# Повний реєстр 16 критичних вузлів з точними координатами та via-точками посередині
 BRIDGES = {
-    'KYI_SOUTH': {'name': 'Південний міст', 'region': 'Київ', 'start_lat': 50.3850, 'start_lon': 30.5750, 'end_lat': 50.3950, 'end_lon': 30.5950, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_kyiv'},
-    'KYI_DARN': {'name': 'Дарницький міст', 'region': 'Київ', 'start_lat': 50.4120, 'start_lon': 30.5850, 'end_lat': 50.4250, 'end_lon': 30.6000, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/kyivcityofficial'},
-    'KYI_PATON': {'name': 'Міст Патона', 'region': 'Київ', 'start_lat': 50.4320, 'start_lon': 30.5700, 'end_lat': 50.4400, 'end_lon': 30.5900, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_kyiv'},
-    'KYI_METRO': {'name': 'Міст Метро', 'region': 'Київ', 'start_lat': 50.4430, 'start_lon': 30.5480, 'end_lat': 50.4500, 'end_lon': 30.5650, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/kyivcityofficial'},
-    'KYI_NORTH': {'name': 'Північний міст', 'region': 'Київ', 'start_lat': 50.4820, 'start_lon': 30.5300, 'end_lat': 50.4940, 'end_lon': 30.5420, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_kyiv'},
-    'KYI_GAVAN': {'name': 'Гаванський міст', 'region': 'Київ', 'start_lat': 50.4680, 'start_lon': 30.5220, 'end_lat': 50.4780, 'end_lon': 30.5340, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/kyivcityofficial'},
-    'KYI_HPP': {'name': 'Київська ГЕС', 'region': 'Вишгород', 'start_lat': 50.5750, 'start_lon': 30.4950, 'end_lat': 50.5900, 'end_lon': 30.5150, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/vyshgorod_rada'},
-    'KANIV_HPP': {'name': 'Канівська ГЕС', 'region': 'Черкаська обл.', 'start_lat': 49.7450, 'start_lon': 31.4400, 'end_lat': 49.7600, 'end_lon': 31.4650, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/cherkaskaODA'},
-    'CHK': {'name': 'Черкаський міст', 'region': 'Черкаси', 'start_lat': 49.4350, 'start_lon': 32.0400, 'end_lat': 49.4550, 'end_lon': 32.0700, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_cherkasy'},
-    'KREM': {'name': 'Кременчуцький міст / ГЕС', 'region': 'Кременчук', 'start_lat': 49.0650, 'start_lon': 33.2500, 'end_lat': 49.0800, 'end_lon': 33.2800, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/poltavaoda'},
-    'KAM_HPP': {'name': 'Камʼянська ГЕС', 'region': 'Дніпропетровська обл.', 'start_lat': 48.5400, 'start_lon': 34.8200, 'end_lat': 48.5600, 'end_lon': 34.8500, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/adm_dp'},
-    'DNI_AMUR': {'name': 'Амурський міст', 'region': 'Дніпро', 'start_lat': 48.4750, 'start_lon': 35.0050, 'end_lat': 48.4900, 'end_lon': 35.0300, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_dp'},
-    'DNI_CENTR': {'name': 'Центральний міст', 'region': 'Дніпро', 'start_lat': 48.4650, 'start_lon': 35.0350, 'end_lat': 48.4800, 'end_lon': 35.0600, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/borys_filatov'},
-    'DNI_SOUTH': {'name': 'Південний міст (Дніпро)', 'region': 'Дніпро', 'start_lat': 48.3750, 'start_lon': 35.0700, 'end_lat': 48.3900, 'end_lon': 35.1000, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_dp'},
-    'ZP_PREOBR': {'name': 'Мости Преображенського', 'region': 'Запоріжжя', 'start_lat': 47.8400, 'start_lon': 35.0700, 'end_lat': 47.8600, 'end_lon': 35.1000, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/zoda_gov_ua'},
-    'ZP_NEW': {'name': 'Нові мости (Запоріжжя)', 'region': 'Запоріжжя', 'start_lat': 47.8550, 'start_lon': 35.0850, 'end_lat': 47.8750, 'end_lon': 35.1150, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/zoda_gov_ua'}
+    'KYI_SOUTH': {
+        'name': 'Південний міст', 'region': 'Київ', 
+        'start_lat': 50.3957, 'start_lon': 30.5630, 
+        'via_lat': 50.3900, 'via_lon': 30.5850, 
+        'end_lat': 50.3925, 'end_lon': 30.6120, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_kyiv'
+    },
+    'KYI_DARN': {
+        'name': 'Дарницький міст', 'region': 'Київ', 
+        'start_lat': 50.4120, 'start_lon': 30.5750, 
+        'via_lat': 50.4180, 'via_lon': 30.5920, 
+        'end_lat': 50.4250, 'end_lon': 30.6050, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/kyivcityofficial'
+    },
+    'KYI_PATON': {
+        'name': 'Міст Патона', 'region': 'Київ', 
+        'start_lat': 50.4320, 'start_lon': 30.5600, 
+        'via_lat': 50.4360, 'via_lon': 30.5780, 
+        'end_lat': 50.4400, 'end_lon': 30.5950, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_kyiv'
+    },
+    'KYI_METRO': {
+        'name': 'Міст Метро', 'region': 'Київ', 
+        'start_lat': 50.4430, 'start_lon': 30.5400, 
+        'via_lat': 50.4460, 'via_lon': 30.5550, 
+        'end_lat': 50.4500, 'end_lon': 30.5700, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/kyivcityofficial'
+    },
+    'KYI_NORTH': {
+        'name': 'Північний міст', 'region': 'Київ', 
+        'start_lat': 50.4820, 'start_lon': 30.5200, 
+        'via_lat': 50.4880, 'via_lon': 30.5350, 
+        'end_lat': 50.4940, 'end_lon': 30.5450, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_kyiv'
+    },
+    'KYI_GAVAN': {
+        'name': 'Гаванський міст', 'region': 'Київ', 
+        'start_lat': 50.4680, 'start_lon': 30.5150, 
+        'via_lat': 50.4730, 'via_lon': 30.5260, 
+        'end_lat': 50.4780, 'end_lon': 30.5380, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/kyivcityofficial'
+    },
+    'KYI_HPP': {
+        'name': 'Київська ГЕС', 'region': 'Вишгород', 
+        'start_lat': 50.5750, 'start_lon': 30.4850, 
+        'via_lat': 50.5820, 'via_lon': 30.5050, 
+        'end_lat': 50.5900, 'end_lon': 30.5200, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/vyshgorod_rada'
+    },
+    'KANIV_HPP': {
+        'name': 'Канівська ГЕС', 'region': 'Черкаська обл.', 
+        'start_lat': 49.7450, 'start_lon': 31.4300, 
+        'via_lat': 49.7520, 'via_lon': 31.4520, 
+        'end_lat': 49.7600, 'end_lon': 31.4700, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/cherkaskaODA'
+    },
+    'CHK': {
+        'name': 'Черкаський міст', 'region': 'Черкаси', 
+        'start_lat': 49.4350, 'start_lon': 32.0300, 
+        'via_lat': 49.4450, 'via_lon': 32.0550, 
+        'end_lat': 49.4550, 'end_lon': 32.0800, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_cherkasy'
+    },
+    'KREM': {
+        'name': 'Кременчуцький міст / ГЕС', 'region': 'Кременчук', 
+        'start_lat': 49.0650, 'start_lon': 33.2400, 
+        'via_lat': 49.0720, 'via_lon': 33.2650, 
+        'end_lat': 49.0800, 'end_lon': 33.2900, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/poltavaoda'
+    },
+    'KAM_HPP': {
+        'name': 'Камʼянська ГЕС', 'region': 'Дніпропетровська обл.', 
+        'start_lat': 48.5400, 'start_lon': 34.8100, 
+        'via_lat': 48.5500, 'via_lon': 34.8350, 
+        'end_lat': 48.5600, 'end_lon': 34.8600, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/adm_dp'
+    },
+    'DNI_AMUR': {
+        'name': 'Амурський міст', 'region': 'Дніпро', 
+        'start_lat': 48.4750, 'start_lon': 34.9950, 
+        'via_lat': 48.4820, 'via_lon': 35.0180, 
+        'end_lat': 48.4900, 'end_lon': 35.0350, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_dp'
+    },
+    'DNI_CENTR': {
+        'name': 'Центральний міст', 'region': 'Дніпро', 
+        'start_lat': 48.4650, 'start_lon': 35.0250, 
+        'via_lat': 48.4720, 'via_lon': 35.0480, 
+        'end_lat': 48.4800, 'end_lon': 35.0650, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/borys_filatov'
+    },
+    'DNI_SOUTH': {
+        'name': 'Південний міст (Дніпро)', 'region': 'Дніпро', 
+        'start_lat': 48.3750, 'start_lon': 35.0600, 
+        'via_lat': 48.3820, 'via_lon': 35.0850, 
+        'end_lat': 48.3900, 'end_lon': 35.1100, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_dp'
+    },
+    'ZP_PREOBR': {
+        'name': 'Мости Преображенського', 'region': 'Запоріжжя', 
+        'start_lat': 47.8400, 'start_lon': 35.0600, 
+        'via_lat': 47.8500, 'via_lon': 35.0850, 
+        'end_lat': 47.8600, 'end_lon': 35.1100, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/zoda_gov_ua'
+    },
+    'ZP_NEW': {
+        'name': 'Нові мости (Запоріжжя)', 'region': 'Запоріжжя', 
+        'start_lat': 47.8550, 'start_lon': 35.0750, 
+        'via_lat': 47.8650, 'via_lon': 35.1000, 
+        'end_lat': 47.8750, 'end_lon': 35.1250, 
+        'source_name': 'Google Maps API', 'source_url': 'https://t.me/zoda_gov_ua'
+    }
 }
 
 def main():
@@ -53,9 +149,21 @@ def main():
         payload = {
             "origin": {"location": {"latLng": {"latitude": b_info['start_lat'], "longitude": b_info['start_lon']}}},
             "destination": {"location": {"latLng": {"latitude": b_info['end_lat'], "longitude": b_info['end_lon']}}},
-            "travelMode": "DRIVE",
+            "travelMode": "DRIVE",  # Повертаємо повноцінний автомобільний режим
             "routingPreference": "TRAFFIC_AWARE"
         }
+        
+        # Примусово проводимо маршрут через центр мосту за допомогою via-точки
+        if 'via_lat' in b_info:
+            payload["intermediates"] = [{
+                "location": {
+                    "latLng": {
+                        "latitude": b_info['via_lat'], 
+                        "longitude": b_info['via_lon']
+                    }
+                },
+                "via": True
+            }]
         
         try:
             res = requests.post(url, json=payload, headers=headers, timeout=10).json()
