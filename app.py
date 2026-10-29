@@ -22,8 +22,8 @@ HISTORY_FILE = "bridges_traffic_log.csv"  # Уніфіковано назву ф
 BRIDGES = {
     'KYI_SOUTH': {
         'name': 'Південний міст', 'region': 'Київ', 
-        'start_lat': 50.3920, 'start_lon': 30.5750, 
-        'end_lat': 50.3780, 'end_lon': 30.6200,
+        'start_lat': 50.398383, 'start_lon': 30.567013, 
+        'end_lat': 50.394345, 'end_lon': 30.599063,
         'baseline_km': 2.8,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
