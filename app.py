@@ -22,15 +22,15 @@ HISTORY_FILE = "bridges_traffic_log.csv"  # Уніфіковано назву ф
 BRIDGES = {
     'KYI_SOUTH': {
         'name': 'Південний міст', 'region': 'Київ', 
-        'start_lat': 50.3905, 'start_lon': 30.5820, 
-        'end_lat': 50.3790, 'end_lon': 30.6120,
+        'start_lat': 50.3920, 'start_lon': 30.5750, 
+        'end_lat': 50.3780, 'end_lon': 30.6200,
         'baseline_km': 2.8,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
     'KYI_DARN': {
         'name': 'Дарницький міст', 'region': 'Київ', 
-        'start_lat': 50.4150, 'start_lon': 30.5800, 
-        'end_lat': 50.4110, 'end_lon': 30.6080, 
+        'start_lat': 50.418943, 'start_lon': 30.597587, 
+        'end_lat': 50.413308, 'end_lon': 30.575035, 
         'baseline_km': 2.3,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
@@ -43,8 +43,8 @@ BRIDGES = {
     },
     'KYI_METRO': {
         'name': 'Міст Метро', 'region': 'Київ', 
-        'start_lat': 50.4450, 'start_lon': 30.5550, 
-        'end_lat': 50.4490, 'end_lon': 30.5820, 
+        'start_lat': 50.441491, 'start_lon': 30.560397, 
+        'end_lat': 50.445658, 'end_lon': 30.575147, 
         'baseline_km': 2.0,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
@@ -57,8 +57,8 @@ BRIDGES = {
     },
     'KYI_GAVAN': {
         'name': 'Гаванський міст', 'region': 'Київ', 
-        'start_lat': 50.4690, 'start_lon': 30.5180, 
-        'end_lat': 50.4760, 'end_lon': 30.5340, 
+        'start_lat': 50.467400, 'start_lon': 30.524984, 
+        'end_lat': 50.475162, 'end_lon': 30.534496, 
         'baseline_km': 1.5,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
