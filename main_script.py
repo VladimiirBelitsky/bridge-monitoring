@@ -12,9 +12,9 @@ HISTORY_FILE = "bridges_traffic_log.csv"
 BRIDGES = {
     'KYI_SOUTH': {
         'name': 'Південний міст', 'region': 'Київ', 
-        'start_lat': 50.394654, 'start_lon': 30.597231, 
+        'start_lat': 50.394697, 'start_lon': 30.597215, 
         'via_lat': 50.395122, 'via_lon': 30.583162, 
-        'end_lat': 50.23451, 'end_lon': 30.34276, 
+        'end_lat': 50.395750, 'end_lon': 30.579598, 
         'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_kyiv'
     },
     'KYI_DARN': {
