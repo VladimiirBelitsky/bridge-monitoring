@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 import pandas as pd
 import os
 import time
@@ -135,7 +136,7 @@ BRIDGES = {
 }
 
 def get_kyiv_now():
-    return datetime.now(timezone.utc) + timedelta(hours=3)
+    return datetime.now(ZoneInfo("Europe/Kyiv"))
 
 def get_active_api_key(manual_input=""):
     if manual_input and manual_input.strip():
