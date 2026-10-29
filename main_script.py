@@ -26,8 +26,8 @@ BRIDGES = {
     },
     'KYI_PATON': {
         'name': 'Міст Патона', 'region': 'Київ', 
-        'start_lat': 50.4260, 'start_lon': 30.5650, 
-        'end_lat': 50.4330, 'end_lon': 30.6050, 
+        'start_lat': 50.430015, 'start_lon': 30.591375, 
+        'end_lat': 50.424265, 'end_lon': 30.571904, 
         'baseline_km': 3.0,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
