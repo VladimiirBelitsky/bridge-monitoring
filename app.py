@@ -16,26 +16,122 @@ st.set_page_config(
 st_autorefresh(interval=30 * 60 * 1000, key="datarefresh")
 
 KYIV_TZ = timezone(timedelta(hours=3))
-HISTORY_FILE = "traffic_history.csv"
+HISTORY_FILE = "bridges_traffic_log.csv"  # Уніфіковано назву файлу з основінм скриптом
 
-# Реєстр 16 критичних вузлів
+# Реєстр 16 критичних вузлів з точними координатами та еталонними відстанями
 BRIDGES = {
-    'KYI_SOUTH': {'name': 'Південний міст', 'region': 'Київ', 'start_lat': 50.3850, 'start_lon': 30.5750, 'end_lat': 50.3950, 'end_lon': 30.5950, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_kyiv'},
-    'KYI_DARN': {'name': 'Дарницький міст', 'region': 'Київ', 'start_lat': 50.4120, 'start_lon': 30.5850, 'end_lat': 50.4250, 'end_lon': 30.6000, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/kyivcityofficial'},
-    'KYI_PATON': {'name': 'Міст Патона', 'region': 'Київ', 'start_lat': 50.4320, 'start_lon': 30.5700, 'end_lat': 50.4400, 'end_lon': 30.5900, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_kyiv'},
-    'KYI_METRO': {'name': 'Міст Метро', 'region': 'Київ', 'start_lat': 50.4430, 'start_lon': 30.5480, 'end_lat': 50.4500, 'end_lon': 30.5650, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/kyivcityofficial'},
-    'KYI_NORTH': {'name': 'Північний міст', 'region': 'Київ', 'start_lat': 50.4820, 'start_lon': 30.5300, 'end_lat': 50.4940, 'end_lon': 30.5420, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_kyiv'},
-    'KYI_GAVAN': {'name': 'Гаванський міст', 'region': 'Київ', 'start_lat': 50.4680, 'start_lon': 30.5220, 'end_lat': 50.4780, 'end_lon': 30.5340, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/kyivcityofficial'},
-    'KYI_HPP': {'name': 'Київська ГЕС', 'region': 'Вишгород', 'start_lat': 50.5750, 'start_lon': 30.4950, 'end_lat': 50.5900, 'end_lon': 30.5150, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/vyshgorod_rada'},
-    'KANIV_HPP': {'name': 'Канівська ГЕС', 'region': 'Черкаська обл.', 'start_lat': 49.7450, 'start_lon': 31.4400, 'end_lat': 49.7600, 'end_lon': 31.4650, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/cherkaskaODA'},
-    'CHK': {'name': 'Черкаський міст', 'region': 'Черкаси', 'start_lat': 49.4350, 'start_lon': 32.0400, 'end_lat': 49.4550, 'end_lon': 32.0700, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_cherkasy'},
-    'KREM': {'name': 'Кременчуцький міст / ГЕС', 'region': 'Кременчук', 'start_lat': 49.0650, 'start_lon': 33.2500, 'end_lat': 49.0800, 'end_lon': 33.2800, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/poltavaoda'},
-    'KAM_HPP': {'name': 'Камʼянська ГЕС', 'region': 'Дніпропетровська обл.', 'start_lat': 48.5400, 'start_lon': 34.8200, 'end_lat': 48.5600, 'end_lon': 34.8500, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/adm_dp'},
-    'DNI_AMUR': {'name': 'Амурський міст', 'region': 'Дніпро', 'start_lat': 48.4750, 'start_lon': 35.0050, 'end_lat': 48.4900, 'end_lon': 35.0300, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_dp'},
-    'DNI_CENTR': {'name': 'Центральний міст', 'region': 'Дніпро', 'start_lat': 48.4650, 'start_lon': 35.0350, 'end_lat': 48.4800, 'end_lon': 35.0600, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/borys_filatov'},
-    'DNI_SOUTH': {'name': 'Південний міст (Дніпро)', 'region': 'Дніпро', 'start_lat': 48.3750, 'start_lon': 35.0700, 'end_lat': 48.3900, 'end_lon': 35.1000, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_dp'},
-    'ZP_PREOBR': {'name': 'Мости Преображенського', 'region': 'Запоріжжя', 'start_lat': 47.8400, 'start_lon': 35.0700, 'end_lat': 47.8600, 'end_lon': 35.1000, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/zoda_gov_ua'},
-    'ZP_NEW': {'name': 'Нові мости (Запоріжжя)', 'region': 'Запоріжжя', 'start_lat': 47.8550, 'start_lon': 35.0850, 'end_lat': 47.8750, 'end_lon': 35.1150, 'source_name': 'Google Maps API', 'source_url': 'https://t.me/zoda_gov_ua'}
+    'KYI_SOUTH': {
+        'name': 'Південний міст', 'region': 'Київ', 
+        'start_lat': 50.3905, 'start_lon': 30.5820, 
+        'end_lat': 50.3790, 'end_lon': 30.6120,
+        'baseline_km': 2.8,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'KYI_DARN': {
+        'name': 'Дарницький міст', 'region': 'Київ', 
+        'start_lat': 50.4150, 'start_lon': 30.5800, 
+        'end_lat': 50.4110, 'end_lon': 30.6080, 
+        'baseline_km': 2.3,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'KYI_PATON': {
+        'name': 'Міст Патона', 'region': 'Київ', 
+        'start_lat': 50.4280, 'start_lon': 30.5700, 
+        'end_lat': 50.4330, 'end_lon': 30.5980, 
+        'baseline_km': 2.1,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'KYI_METRO': {
+        'name': 'Міст Метро', 'region': 'Київ', 
+        'start_lat': 50.4450, 'start_lon': 30.5550, 
+        'end_lat': 50.4490, 'end_lon': 30.5820, 
+        'baseline_km': 2.0,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'KYI_NORTH': {
+        'name': 'Північний міст', 'region': 'Київ', 
+        'start_lat': 50.4890, 'start_lon': 30.5310, 
+        'end_lat': 50.4960, 'end_lon': 30.5620, 
+        'baseline_km': 2.5,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'KYI_GAVAN': {
+        'name': 'Гаванський міст', 'region': 'Київ', 
+        'start_lat': 50.4690, 'start_lon': 30.5180, 
+        'end_lat': 50.4760, 'end_lon': 30.5340, 
+        'baseline_km': 1.5,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'KYI_HPP': {
+        'name': 'Київська ГЕС', 'region': 'Вишгород', 
+        'start_lat': 50.5750, 'start_lon': 30.4850, 
+        'end_lat': 50.5900, 'end_lon': 30.5200, 
+        'baseline_km': 3.5,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'KANIV_HPP': {
+        'name': 'Канівська ГЕС', 'region': 'Черкаська обл.', 
+        'start_lat': 49.7450, 'start_lon': 31.4300, 
+        'end_lat': 49.7600, 'end_lon': 31.4700, 
+        'baseline_km': 4.0,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'CHK': {
+        'name': 'Черкаський міст', 'region': 'Черкаси', 
+        'start_lat': 49.4350, 'start_lon': 32.0500, 
+        'end_lat': 49.4680, 'end_lon': 32.1450, 
+        'baseline_km': 13.0,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'KREM': {
+        'name': 'Кременчуцький міст / ГЕС', 'region': 'Кременчук', 
+        'start_lat': 49.0580, 'start_lon': 33.4050, 
+        'end_lat': 49.0740, 'end_lon': 33.4280, 
+        'baseline_km': 2.5,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'KAM_HPP': {
+        'name': 'Камʼянська ГЕС', 'region': 'Дніпропетровська обл.', 
+        'start_lat': 48.5400, 'start_lon': 34.8100, 
+        'end_lat': 48.5600, 'end_lon': 34.8600, 
+        'baseline_km': 4.2,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'DNI_AMUR': {
+        'name': 'Амурський міст', 'region': 'Дніпро', 
+        'start_lat': 48.4830, 'start_lon': 35.0220, 
+        'end_lat': 48.4980, 'end_lon': 35.0480, 
+        'baseline_km': 2.8,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'DNI_CENTR': {
+        'name': 'Центральний міст', 'region': 'Дніпро', 
+        'start_lat': 48.4740, 'start_lon': 35.0480, 
+        'end_lat': 48.4890, 'end_lon': 35.0780, 
+        'baseline_km': 3.0,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'DNI_SOUTH': {
+        'name': 'Південний міст (Дніпро)', 'region': 'Дніпро', 
+        'start_lat': 48.3980, 'start_lon': 35.0680, 
+        'end_lat': 48.4280, 'end_lon': 35.0980, 
+        'baseline_km': 4.0,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'ZP_PREOBR': {
+        'name': 'Мости Преображенського', 'region': 'Запоріжжя', 
+        'start_lat': 47.8480, 'start_lon': 35.0830, 
+        'end_lat': 47.8630, 'end_lon': 35.0930, 
+        'baseline_km': 2.0,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    },
+    'ZP_NEW': {
+        'name': 'Нові мости (Запоріжжя)', 'region': 'Запоріжжя', 
+        'start_lat': 47.8380, 'start_lon': 35.0580, 
+        'end_lat': 47.8580, 'end_lon': 35.0880, 
+        'baseline_km': 3.5,
+        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    }
 }
 
 def get_kyiv_now():
@@ -93,7 +189,7 @@ def fetch_routes_api_telemetry(api_key):
     headers = {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': api_key,
-        'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.travelAdvisory'
+        'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters'
     }
 
     batch_records = []
@@ -102,9 +198,7 @@ def fetch_routes_api_telemetry(api_key):
     for b_id, b_info in BRIDGES.items():
         speed_str = "Н/Д"
         status_str = "❌ Немає зв'язку з API"
-        success = False
         
-        # Механізм повторних спроб (до 3 разів) при отриманні помилки 429
         for attempt in range(3):
             try:
                 payload = {
@@ -121,25 +215,32 @@ def fetch_routes_api_telemetry(api_key):
                     dur_str = str(route.get('duration', '0s')).replace('s', '')
                     dur_sec = float(dur_str) if dur_str else 0.0
                     
-                    if dist_m > 0 and dur_sec > 0:
+                    if dist_m > 0:
                         dist_km = dist_m / 1000.0
-                        hours = dur_sec / 3600.0
-                        calc_speed = round(dist_km / hours)
                         
-                        speed_str = f"{calc_speed} км/год"
-                        if calc_speed < 20:
-                            status_str = '🔴 Критично / Затор (Live)'
-                        elif calc_speed < 35:
-                            status_str = '🟡 Повільний рух (Live)'
+                        # Математичний детектор закриття мосту за відстаню
+                        is_closed = dist_km > (b_info['baseline_km'] * 2.3)
+                        
+                        if is_closed:
+                            speed_str = "0 км/год"
+                            status_str = '⛔ Закрито / Обʼїзд (Math Detector)'
                         else:
-                            status_str = '🟢 Вільно (Live)'
-                        success = True
-                        break
+                            hours = dur_sec / 3600.0 if dur_sec > 0 else 0.01
+                            calc_speed = round(dist_km / hours) if hours > 0 else 0
+                            speed_str = f"{calc_speed} км/год"
+                            
+                            if calc_speed < 20:
+                                status_str = '🔴 Критично / Затор (Live)'
+                            elif calc_speed < 35:
+                                status_str = '🟡 Повільний рух (Live)'
+                            else:
+                                status_str = '🟢 Вільно (Live)'
+                    break
                 elif 'error' in res:
                     err_code = res['error'].get('code', 'Unknown')
                     if err_code == 429:
                         status_str = "❌ Ліміт запитів (429), повторюємо..."
-                        time.sleep(3.0 * (attempt + 1)) # Збільшуємо паузу з кожною спробою
+                        time.sleep(3.0 * (attempt + 1))
                         continue
                     else:
                         status_str = f"❌ API Error {err_code}"
@@ -149,8 +250,7 @@ def fetch_routes_api_telemetry(api_key):
                 status_str = "❌ Помилка мережі"
                 time.sleep(1.5)
 
-        # Безпечна пауза між містами (збільшено до 1.2 сек для стабільності)
-        time.sleep(1.2)
+        time.sleep(1.0)
 
         record = {
             'timestamp': timestamp_str, 'id': b_id, 'name': b_info['name'],
@@ -165,7 +265,7 @@ def fetch_routes_api_telemetry(api_key):
 
 # --- Інтерфейс ---
 st.title("🌉 Оперативний моніторинг мостів та переправ України")
-st.markdown("Контроль трафіку на основі **сучасного Routes API**.")
+st.markdown("Контроль трафіку на основі **сучасного Routes API та геометричного детектора**.")
 
 st.sidebar.header("⚙️ Конфігурація доступу")
 manual_key_input = st.sidebar.text_input("Routes API Key (якщо треба перевизначити):", type="password", value="")
@@ -178,25 +278,28 @@ else:
 
 tab_live, tab_history = st.tabs(["📊 Оперативна панель (Live)", "📈 Архів та історія"])
 
-if 'cached_live' not in st.session_state:
-    st.session_state['cached_live'] = {}
-
 with tab_live:
     col_btn1, col_info = st.columns([1, 2])
     with col_btn1:
         if st.button("🔄 Оновити зріз з Google Maps"):
-            with st.spinner("Збираємо телеметрію по 16 вузлах із захистом від лімітів..."):
+            with st.spinner("Збираємо телеметрію по 16 вузлах..."):
                 st.session_state['cached_live'] = fetch_routes_api_telemetry(resolved_key)
             st.success("Дані успішно оновлено!")
         else:
-            if not st.session_state['cached_live']:
-                with st.spinner("Завантаження початкових даних..."):
+            # Якщо в кеші нічого немає, підтягуємо найсвіжіші дані з CSV-файлу історії
+            if 'cached_live' not in st.session_state or not st.session_state['cached_live']:
+                df_hist = load_history_csv()
+                if not df_hist.empty:
+                    # Беремо останній зафіксований стан для кожного мосту
+                    df_latest = df_hist.sort_values('timestamp').groupby('id').tail(1)
+                    st.session_state['cached_live'] = {row['id']: row.to_dict() for _, row in df_latest.iterrows()}
+                else:
                     st.session_state['cached_live'] = fetch_routes_api_telemetry(resolved_key)
 
     with col_info:
         st.info(f"Поточний час Києва: {get_kyiv_now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-    traffic_data = st.session_state['cached_live']
+    traffic_data = st.session_state.get('cached_live', {})
     if traffic_data:
         st.markdown("### 📊 Поточний стан мостової мережі (Live)")
         batch_items = list(traffic_data.items())
