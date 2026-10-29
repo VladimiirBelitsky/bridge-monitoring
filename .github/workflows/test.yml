@@ -1,0 +1,24 @@
+name: Test Telegram Parser
+
+on:
+  workflow_dispatch: # Дозволяє запускати вручну будь-коли однією кнопкою
+
+jobs:
+  run-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 pandas
+
+      - name: Run test script
+        run: |
+          python test_parser.py
