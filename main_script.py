@@ -47,8 +47,8 @@ BRIDGES = {
     },
     'KYI_GAVAN': {
         'name': 'Гаванський міст', 'region': 'Київ', 
-        'start_lat': 50.4680, 'start_lon': 30.5150, 
-        'end_lat': 50.4780, 'end_lon': 30.5380, 
+        'start_lat': 50.467400, 'start_lon': 30.524984, 
+        'end_lat': 50.475162, 'end_lon': 30.534496, 
         'baseline_km': 2.2,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
