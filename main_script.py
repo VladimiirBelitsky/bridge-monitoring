@@ -13,7 +13,7 @@ BRIDGES = {
     'KYI_SOUTH': {
         'name': 'Південний міст', 'region': 'Київ', 
         'start_lat': 50.3957, 'start_lon': 30.5630, 
-        'via_lat': 50.3900, 'via_lon': 30.5850, 
+        'via_lat': 50.395122, 'via_lon': 30.583162, 
         'end_lat': 50.3925, 'end_lon': 30.6120, 
         'source_name': 'Google Maps API', 'source_url': 'https://t.me/patrolpolice_kyiv'
     },
