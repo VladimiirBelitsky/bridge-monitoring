@@ -19,8 +19,8 @@ BRIDGES = {
     },
     'KYI_DARN': {
         'name': 'Дарницький міст', 'region': 'Київ', 
-        'start_lat': 50.4140, 'start_lon': 30.5800, 
-        'end_lat': 50.4080, 'end_lon': 30.6150, 
+        'start_lat': 50.418943, 'start_lon': 30.597587, 
+        'end_lat': 50.24467, 'end_lon': 30.34297, 
         'baseline_km': 3.0,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
