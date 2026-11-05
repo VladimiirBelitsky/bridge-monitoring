@@ -128,8 +128,8 @@ BRIDGES = {
     },
     'ZP_NEW': {
         'name': 'Нові мости (Запоріжжя)', 'region': 'Запоріжжя', 
-        'start_lat': 47.8380, 'start_lon': 35.0580, 
-        'end_lat': 47.8580, 'end_lon': 35.0880, 
+        'start_lat': 47.50297, 'start_lon': 35.04480, 
+        'end_lat': 47.50428, 'end_lon': 35.05299, 
         'baseline_km': 3.5,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     }
