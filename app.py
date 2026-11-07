@@ -50,10 +50,11 @@ BRIDGES = {
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
     'KYI_NORTH': {
-        'name': 'Північний міст', 'region': 'Київ', 
-        'start_lat': 50.4890, 'start_lon': 30.5310, 
-        'end_lat': 50.4960, 'end_lon': 30.5620, 
-        'baseline_km': 2.5,
+        'name': 'Північний міст', 'region': 'Київ',
+        'start_lat': 50.488927, 'start_lon': 30.530230,  # Початок[cite: 17]
+        'mid_lat': 50.490537, 'mid_lon': 30.535525,      # Середина (via)[cite: 18]
+        'end_lat': 50.495439, 'end_lon': 30.562552,      # Кінець[cite: 19]
+        'baseline_km': 1.8,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
     'KYI_GAVAN': {
