@@ -128,12 +128,13 @@ BRIDGES = {
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
     'ZP_NEW': {
-        'name': 'Нові мости (Запоріжжя)', 'region': 'Запоріжжя', 
-        'start_lat': 47.50297, 'start_lon': 35.04480, 
-        'end_lat': 47.50428, 'end_lon': 35.05299, 
-        'baseline_km': 3.5,
+        'name': 'Нові мости (Запоріжжя)', 'region': 'Запоріжжя',
+        'start_lat': 47.841092, 'start_lon': 35.077708,  # Початок[cite: 14]
+        'mid_lat': 47.842401, 'mid_lon': 35.083798,      # Середина (via)[cite: 15]
+        'end_lat': 47.843739, 'end_lon': 35.090148,      # Кінець[cite: 16]
+        'baseline_km': 1.5,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
-    }
+    },
 }
 
 def get_kyiv_now():
