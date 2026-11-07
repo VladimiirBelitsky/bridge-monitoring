@@ -121,8 +121,8 @@ BRIDGES = {
     },
     'ZP_PREOBR': {
         'name': 'Мости Преображенського', 'region': 'Запоріжжя', 
-        'start_lat': 47.50362, 'start_lon': 35.04451, 
-        'end_lat': 47.50493, 'end_lon': 35.05180, 
+        'start_lat': 47.50372, 'start_lon': 35.04474, 
+        'end_lat': 47.50494, 'end_lon': 35.05183, 
         'baseline_km': 2.0,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
