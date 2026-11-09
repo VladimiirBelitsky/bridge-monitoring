@@ -49,13 +49,25 @@ BRIDGES = {
         'baseline_km': 2.0,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
-    'KYI_NORTH': {
-        'name': 'Північний міст', 'region': 'Київ',
-        'start_lat': 50.488927, 'start_lon': 30.530230,  # Початок[cite: 17]
-        'mid_lat': 50.490537, 'mid_lon': 30.535525,      # Середина (via)[cite: 18]
-        'end_lat': 50.495439, 'end_lon': 30.562552,      # Кінець[cite: 19]
+    'KYI_NORTH_LR': {
+        'name': 'Північний міст (Право ➔ Ліво)', 
+        'region': 'Київ',
+        'start_lat': 50.488955, 'start_lon': 30.530307,  # Початок на правому березі[cite: 20]
+        'mid_lat': 50.491678, 'mid_lon': 30.539287,      # Середина на мосту (via)[cite: 21]
+        'end_lat': 50.495487, 'end_lon': 30.566119,      # Кінець на лівому березі[cite: 22]
         'baseline_km': 1.8,
-        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+        'source_name': 'Google Maps API', 
+        'source_url': 'https://maps.google.com'
+    },
+    'KYI_NORTH_RL': {
+        'name': 'Північний міст (Ліво ➔ Право)', 
+        'region': 'Київ',
+        'start_lat': 50.495637, 'start_lon': 30.565647,  # Початок на лівому березі[cite: 23]
+        'mid_lat': 50.491709, 'mid_lon': 30.539028,      # Середина на мосту (via)[cite: 24]
+        'end_lat': 50.489119, 'end_lon': 30.530389,      # Кінець на правому березі
+        'baseline_km': 1.8,
+        'source_name': 'Google Maps API', 
+        'source_url': 'https://maps.google.com'
     },
     'KYI_GAVAN': {
         'name': 'Гаванський міст', 'region': 'Київ', 
