@@ -21,12 +21,25 @@ HISTORY_FILE = "bridges_traffic_log.csv"  # Уніфіковано назву ф
 
 # Реєстр 16 критичних вузлів з точними координатами та еталонними відстанями
 BRIDGES = {
-    'KYI_SOUTH': {
-        'name': 'Південний міст', 'region': 'Київ', 
-        'start_lat': 50.398383, 'start_lon': 30.567013, 
-        'end_lat': 50.394345, 'end_lon': 30.599063,
-        'baseline_km': 2.8,
-        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    'KYI_SOUTH_RL': {
+        'name': 'Південний міст (Право ➔ Ліво)', 
+        'region': 'Київ',
+        'start_lat': 50.399572, 'start_lon': 30.563830,  # Початок на правому березі
+        'mid_lat': 50.394718, 'mid_lon': 30.591234,      # Середина на мосту (via)
+        'end_lat': 50.394261, 'end_lon': 30.599940,      # Кінець на лівому березі (Бажана)
+        'baseline_km': 2.1,
+        'source_name': 'Google Maps API', 
+        'source_url': 'https://maps.google.com'
+    },
+    'KYI_SOUTH_LR': {
+        'name': 'Південний міст (Ліво ➔ Право)', 
+        'region': 'Київ',
+        'start_lat': 50.394518, 'start_lon': 30.599852,  # Початок на лівому березі (Бажана)
+        'mid_lat': 50.395126, 'mid_lon': 30.587226,      # Середина на мосту (via)
+        'end_lat': 50.399329, 'end_lon': 30.565116,      # Кінець на правому березі
+        'baseline_km': 2.1,
+        'source_name': 'Google Maps API', 
+        'source_url': 'https://maps.google.com'
     },
     'KYI_DARN': {
         'name': 'Дарницький міст', 'region': 'Київ', 
