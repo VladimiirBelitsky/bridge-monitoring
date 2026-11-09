@@ -41,12 +41,25 @@ BRIDGES = {
         'source_name': 'Google Maps API', 
         'source_url': 'https://maps.google.com'
     },
-    'KYI_DARN': {
-        'name': 'Дарницький міст', 'region': 'Київ', 
-        'start_lat': 50.418943, 'start_lon': 30.597587, 
-        'end_lat': 50.413308, 'end_lon': 30.575035, 
-        'baseline_km': 2.3,
-        'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
+    'KYI_DARNYTSKYI_RL': {
+        'name': 'Дарницький міст (Право ➔ Ліво)', 
+        'region': 'Київ',
+        'start_lat': 50.412316, 'start_lon': 30.572373,  # Початок на правому березі[cite: 18]
+        'mid_lat': 50.415800, 'mid_lon': 30.586412,      # Середина на мосту[cite: 19]
+        'end_lat': 50.419267, 'end_lon': 30.600101,      # Кінець на лівому березі[cite: 20]
+        'baseline_km': 1.6,
+        'source_name': 'Google Maps API', 
+        'source_url': 'https://maps.google.com'
+    },
+    'KYI_DARNYTSKYI_LR': {
+        'name': 'Дарницький міст (Ліво ➔ Право)', 
+        'region': 'Київ',
+        'start_lat': 50.419346, 'start_lon': 30.599172,  # Початок на лівому березі[cite: 21]
+        'mid_lat': 50.415891, 'mid_lon': 30.585662,      # Середина на мосту[cite: 22]
+        'end_lat': 50.413162, 'end_lon': 30.574714,      # Кінець на правому березі[cite: 23]
+        'baseline_km': 1.6,
+        'source_name': 'Google Maps API', 
+        'source_url': 'https://maps.google.com'
     },
     'KYI_PATON': {
         'name': 'Міст Патона', 'region': 'Київ', 
