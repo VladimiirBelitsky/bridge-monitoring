@@ -2303,3 +2303,19 @@
 2026-11-10 07:00:29,DNI_SOUTH,Південний міст (Дніпро),Дніпро,🟢 Вільно (Live),41 км/год,Google Maps API,https://maps.google.com
 2026-11-10 07:00:29,ZP_PREOBR,Мости Преображенського,Запоріжжя,🟡 Повільний рух (Live),23 км/год,Google Maps API,https://maps.google.com
 2026-11-10 07:00:29,ZP_NEW,Нові мости (Запоріжжя),Запоріжжя,🟡 Повільний рух (Live),33 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,KYI_SOUTH,Південний міст,Київ,🟡 Повільний рух (Live),24 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,KYI_DARN,Дарницький міст,Київ,🟢 Вільно (Live),75 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,KYI_PATON,Міст Патона,Київ,🟡 Повільний рух (Live),20 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,KYI_METRO,Міст Метро,Київ,🟢 Вільно (Live),56 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,KYI_NORTH,Північний міст,Київ,🟡 Повільний рух (Live),26 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,KYI_GAVAN,Гаванський міст,Київ,🟢 Вільно (Live),48 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,KYI_HPP,Київська ГЕС,Вишгород,🟢 Вільно (Live),39 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,KANIV_HPP,Канівська ГЕС,Черкаська обл.,🟢 Вільно (Live),35 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,CHK,Черкаський міст,Черкаси,🟡 Повільний рух (Live),24 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,KREM,Крюківський міст / ГЕС,Кременчук,🟡 Повільний рух (Live),22 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,KAM_HPP,Камʼянська ГЕС,Дніпропетровська обл.,🟢 Вільно (Live),41 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,DNI_AMUR,Амурський міст,Дніпро,🟡 Повільний рух (Live),32 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,DNI_CENTR,Центральний міст,Дніпро,🟡 Повільний рух (Live),24 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,DNI_SOUTH,Південний міст (Дніпро),Дніпро,🟢 Вільно (Live),35 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,ZP_PREOBR,Мости Преображенського,Запоріжжя,🟡 Повільний рух (Live),21 км/год,Google Maps API,https://maps.google.com
+2026-11-10 17:40:21,ZP_NEW,Нові мости (Запоріжжя),Запоріжжя,🟡 Повільний рух (Live),33 км/год,Google Maps API,https://maps.google.com
