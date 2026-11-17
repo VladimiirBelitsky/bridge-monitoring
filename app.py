@@ -75,7 +75,7 @@ BRIDGES = {
         'baseline_km': 2.0,
         'source_name': 'Google Maps API', 'source_url': 'https://maps.google.com'
     },
-    'KYI_NORTH_LR': {
+    'KYI_NORTH_RL': {
         'name': 'Північний міст (Право ➔ Ліво)', 
         'region': 'Київ',
         'start_lat': 50.488955, 'start_lon': 30.530307,  # Початок на правому березі[cite: 20]
@@ -85,7 +85,7 @@ BRIDGES = {
         'source_name': 'Google Maps API', 
         'source_url': 'https://maps.google.com'
     },
-    'KYI_NORTH_RL': {
+    'KYI_NORTH_LR': {
         'name': 'Північний міст (Ліво ➔ Право)', 
         'region': 'Київ',
         'start_lat': 50.495637, 'start_lon': 30.565647,  # Початок на лівому березі[cite: 23]
