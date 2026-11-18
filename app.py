@@ -90,7 +90,7 @@ BRIDGES = {
         'region': 'Київ',
         'start_lat': 50.495637, 'start_lon': 30.565647,  # Початок на лівому березі[cite: 23]
         'mid_lat': 50.491709, 'mid_lon': 30.539028,      # Середина на мосту (via)[cite: 24]
-        'end_lat': 50.489119, 'end_lon': 30.530389,      # Кінець на правому березі
+        'end_lat': 50.488423, 'end_lon': 30.519071,      # Кінець на правому березі
         'baseline_km': 1.8,
         'source_name': 'Google Maps API', 
         'source_url': 'https://maps.google.com'
